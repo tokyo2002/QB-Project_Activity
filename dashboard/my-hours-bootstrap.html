@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Hours (Bootstrap)</title>
+<!--
+  Project Activity - "My Hours" dashboard, Bootstrap 5.3 + Apache ECharts 5 edition.
+  Same data and behavior as my-hours-dashboard.html (read-only):
+    Employees   (bhm98v33q)  fid 53 Current Week's Hours, fid 54 Last Week's Hours
+    Time Cards  (bhm9822gc)  report 6 "My Current Time Cards", report 24 "My Last Week's Time Cards"
+  __QB_APP_TOKEN__ is substituted at deploy time. Open locally (or ?demo=1) for sample data.
+-->
+<script>
+  // Apply saved theme before paint: "light" | "dark"; absent = follow the system.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("qbMyHoursBs.theme"); } catch (e) {}
+    var dark = t === "dark" || (t !== "light" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-bs-theme", dark ? "dark" : "light");
+  })();
+</script>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+<style>
+  :root, [data-bs-theme="light"] { --mh-accent: #2a78d6; --mh-muted-series: #b9b7b0; --mh-hero-a: #0d366b; --mh-hero-b: #2a78d6; }
+  [data-bs-theme="dark"] { --mh-accent: #3987e5; --mh-muted-series: #5c5b56; --mh-hero-a: #0d2747; --mh-hero-b: #1c5cab; }
+  body { background: var(--bs-tertiary-bg); }
+  .hero { color: #fff; border: 0; background: radial-gradient(120% 140% at 100% 0%, var(--mh-hero-b) 0%, var(--mh-hero-a) 70%); }
+  .hero .display-3 { font-weight: 650; letter-spacing: -.03em; }
+  .stat-value { font-size: 2.25rem; font-weight: 650; letter-spacing: -.02em; line-height: 1.1; }
+  .chart { width: 100%; }
+  .table td.n, .table th.n { text-align: center; }
+  .h-cell { display: inline-block; min-width: 2.4rem; padding: .15rem .4rem; border-radius: .375rem; font-weight: 600; }
+  .h-1 { background: rgba(42,120,214,.12); } .h-2 { background: rgba(42,120,214,.25); } .h-3 { background: rgba(42,120,214,.42); }
+  tbody tr[data-rid] { cursor: pointer; user-select: none; }
+  .gauge-wrap { width: 150px; height: 150px; flex: none; }
+  .num { font-variant-numeric: tabular-nums; }
+  #tableWrap thead th, #tableWrap tfoot td { background: var(--bs-tertiary-bg); }
+  #tableWrap thead th { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: var(--bs-secondary-color); }
+  #delta { white-space: nowrap; }
+</style>
+</head>
+<body>
+<div class="container-xl py-4">
+
+  <!-- Header -->
+  <div class="d-flex flex-wrap align-items-end justify-content-between gap-3 mb-4">
+    <div>
+      <div class="text-uppercase small fw-semibold text-body-secondary" style="letter-spacing:.08em">
+        Project Activity &middot; My Hours
+        <span class="badge text-bg-warning ms-1">Bootstrap + ECharts</span>
+        <span class="badge text-bg-secondary ms-1 d-none" id="demoBadge">Sample data</span>
+      </div>
+      <h1 class="h2 fw-bold mb-1 mt-1" id="greeting"><span class="placeholder col-6"></span></h1>
+      <div class="text-body-secondary" id="subline"><span class="placeholder col-8"></span></div>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-outline-secondary" href="https://chartindustries.quickbase.com/nav/app/bg86uwfcw" target="_top" title="Go to the Project Activity app home"><i class="bi bi-house-door me-1"></i>App home</a>
+      <div class="btn-group" role="group" aria-label="Color theme">
+        <button type="button" class="btn btn-outline-secondary" data-theme-choice="auto" title="Match system"><i class="bi bi-display"></i></button>
+        <button type="button" class="btn btn-outline-secondary" data-theme-choice="light" title="Light"><i class="bi bi-sun"></i></button>
+        <button type="button" class="btn btn-outline-secondary" data-theme-choice="dark" title="Dark"><i class="bi bi-moon-stars"></i></button>
+      </div>
+      <button class="btn btn-outline-secondary" id="refresh" type="button"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+    </div>
+  </div>
+
+  <div class="alert alert-info d-none gap-2 align-items-start" id="viewAsBanner" role="status">
+    <i class="bi bi-eye-fill"></i>
+    <div><strong>Test mode.</strong> Viewing as <strong id="viewAsName"></strong>: their hours and time cards, read with your permissions.
+      <a class="alert-link ms-1" id="viewAsExit" href="#" target="_top">Exit test mode</a></div>
+  </div>
+
+  <div class="alert alert-danger d-none d-flex gap-2 align-items-start" id="error" role="alert">
+    <i class="bi bi-exclamation-circle-fill"></i>
+    <div><strong id="errorTitle">Couldn't load your hours.</strong> <span id="errorMsg"></span></div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="row g-3 mb-3">
+    <div class="col-12 col-lg-6">
+      <div class="card hero shadow-sm h-100">
+        <div class="card-body d-flex align-items-center justify-content-between gap-3 p-4">
+          <div>
+            <div class="fw-semibold opacity-75 small">This week's hours</div>
+            <div class="display-3 num my-1" id="curHours">&mdash;</div>
+            <div class="small opacity-75" id="curRange"></div>
+            <div class="mt-2"><span class="badge rounded-pill bg-light bg-opacity-25" id="toGo"></span></div>
+          </div>
+          <div class="gauge-wrap" id="gauge"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body p-4">
+          <div class="small fw-semibold text-body-secondary"><i class="bi bi-square-fill me-1" style="color:var(--mh-muted-series)"></i>Last week's hours</div>
+          <div class="stat-value num my-2" id="lastHours">&mdash;</div>
+          <div class="small text-body-secondary" id="lastRange"></div>
+          <hr>
+          <div class="row small">
+            <div class="col"><div class="text-body-secondary">Change</div><div class="fs-6 fw-semibold num" id="delta">&mdash;</div></div>
+            <div class="col"><div class="text-body-secondary">Time cards</div><div class="fs-5 fw-semibold num" id="lastCards">&mdash;</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-sm-6 col-lg-3">
+      <div class="card shadow-sm h-100">
+        <div class="card-body p-4">
+          <div class="small fw-semibold text-body-secondary"><i class="bi bi-square-fill me-1" style="color:var(--mh-accent)"></i>This week at a glance</div>
+          <div class="stat-value num my-2"><span id="avgDay">&mdash;</span> <span class="fs-6 text-body-secondary">hrs / day</span></div>
+          <div class="small text-body-secondary">Average across days with time logged</div>
+          <hr>
+          <div class="row small">
+            <div class="col"><div class="text-body-secondary">Days logged</div><div class="fs-5 fw-semibold num" id="daysLogged">&mdash;</div></div>
+            <div class="col"><div class="text-body-secondary">Projects</div><div class="fs-5 fw-semibold num" id="projCount">&mdash;</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Time card reports -->
+  <div class="card shadow-sm mb-3">
+    <div class="card-header bg-body d-flex flex-wrap justify-content-between align-items-center gap-2 py-3">
+      <ul class="nav nav-pills" role="tablist">
+        <li class="nav-item"><button class="nav-link active" data-tab="cur" type="button">My current time cards <span class="badge text-bg-light ms-1" id="cntCur">0</span></button></li>
+        <li class="nav-item"><button class="nav-link" data-tab="last" type="button">My last week's time cards <span class="badge text-bg-light ms-1" id="cntLast">0</span></button></li>
+      </ul>
+      <a class="btn btn-primary" id="openReport" href="#" target="_blank" rel="noopener"><i class="bi bi-box-arrow-up-right me-1"></i>Open report in Quickbase</a>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" id="tableWrap"><p class="placeholder-glow p-4 mb-0"><span class="placeholder col-12" style="height:140px"></span></p></div>
+    </div>
+    <div class="card-footer bg-body small text-body-secondary">Double-click a row to edit that time card in a new tab.</div>
+  </div>
+
+  <!-- Charts -->
+  <div class="row g-3">
+    <div class="col-12 col-lg-7">
+      <div class="card shadow-sm h-100">
+        <div class="card-body p-4">
+          <h2 class="h6 fw-bold mb-0">Daily hours</h2>
+          <div class="small text-body-secondary">Sunday to Saturday, this week compared with last week</div>
+          <div class="chart" id="dailyChart" style="height:300px"></div>
+        </div>
+      </div>
+    </div>
+    <div class="col-12 col-lg-5">
+      <div class="card shadow-sm h-100">
+        <div class="card-body p-4">
+          <h2 class="h6 fw-bold mb-0">Where this week went</h2>
+          <div class="small text-body-secondary">Hours by project, this week</div>
+          <div class="chart" id="projChart" style="height:340px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="d-flex flex-wrap justify-content-between gap-2 small text-body-secondary mt-3">
+    <span>Built with Bootstrap 5.3 and Apache ECharts 5. Same data as the standard My Hours page.</span>
+    <span id="updated"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var CONFIG = {
+    realm: "chartindustries.quickbase.com",
+    appId: "bg86uwfcw",
+    appToken: "__QB_APP_TOKEN__",
+    employees: { table: "bhm98v33q", fid: { user: 8, name: 47, cur: 53, last: 54, title: 7, dept: 40, location: 35 } },
+    timeCards: { table: "bhm9822gc", reportCurrent: 6, reportLast: 24,
+                 fid: { rid: 3, project: 300, title: 137, total: 6, days: [23, 10, 11, 12, 13, 14, 24] } },
+    weeklyTarget: 40
+  };
+  var DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var THEME_KEY = "qbMyHoursBs.theme";
+  var isDemo = /[?&]demo=1/.test(location.search) || !/quickbase\.com$/i.test(location.hostname);
+  var $ = function (id) { return document.getElementById(id); };
+  /* ---------------- "view as" test mode (app administrators only) ---------------- */
+  // ?viewAs=someone@chartindustries.com runs this page's queries for that user instead of
+  // the signed-in user. Queries still run with the viewer's own permissions.
+  var VIEW_AS = (function () {
+    var m = /[?&]viewAs=([^&#]*)/i.exec(location.search);
+    var v = m ? decodeURIComponent(m[1].replace(/\+/g, " ")).trim() : "";
+    return /^[^\s'"{}<>]+@[^\s'"{}<>]+$/.test(v) ? v : "";
+  })();
+  var viewAsAsked = /[?&]viewAs=/i.test(location.search), viewAsDenied = false;
+  function userRef() { return VIEW_AS || "_curuser_"; }
+  function isAppAdmin() {
+    var url = "/db/" + CONFIG.appId + "?a=API_GetUserRole" +
+      (CONFIG.appToken.indexOf("__") !== 0 ? "&apptoken=" + encodeURIComponent(CONFIG.appToken) : "");
+    return fetch(url, { credentials: "include" }).then(function (r) { return r.text(); }).then(function (t) {
+      var x = new DOMParser().parseFromString(t, "text/xml"), err = x.querySelector("errcode");
+      if (!err || err.textContent !== "0") return false;
+      return [].some.call(x.querySelectorAll("role > access"), function (a) { return a.getAttribute("id") === "1"; });
+    }).catch(function () { return false; });
+  }
+  function checkViewAs() {
+    if (!viewAsAsked || isDemo) return Promise.resolve();
+    if (!VIEW_AS) { viewAsDenied = "invalid"; return Promise.resolve(); }
+    return isAppAdmin().then(function (ok) { if (!ok) { viewAsDenied = "admin"; VIEW_AS = ""; } });
+  }
+  function exitViewAsUrl() {
+    var q = location.search.replace(/([?&])viewAs=[^&#]*(&?)/i, function (m, a, b) { return b ? a : ""; });
+    return location.pathname + q + location.hash;
+  }
+  function viewAsNotice() {
+    if (viewAsDenied === "admin") return "\"View as\" is only available to app administrators, so this shows your own hours.";
+    if (viewAsDenied === "invalid") return "The viewAs value isn't a valid email address, so this shows your own hours.";
+    return "";
+  }
+
+
+  /* ---------- helpers ---------- */
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+  function fmtH(h) { return (Math.round(num(h) * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+  function startOfWeek(d) { var s = new Date(d.getFullYear(), d.getMonth(), d.getDate()); s.setDate(s.getDate() - s.getDay()); return s; }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function fmtDate(d) { return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+  function weekRange(s) { var e = addDays(s, 6); return fmtDate(s) + " \u2013 " + (s.getMonth() === e.getMonth() ? e.getDate() : fmtDate(e)) + ", " + e.getFullYear(); }
+  function greet(d) { var h = d.getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  var now = new Date(), wkCur = startOfWeek(now), wkLast = addDays(wkCur, -7);
+
+  /* ---------- Quickbase API ---------- */
+  var tokens = {};
+  function check(r) {
+    if (r.ok) return r.json();
+    return r.text().then(function (t) {
+      var msg = t; try { var j = JSON.parse(t); msg = (j.message || "") + (j.description ? " \u2014 " + j.description : ""); } catch (e) {}
+      throw new Error("Quickbase API " + r.status + ": " + msg);
+    });
+  }
+  function tempToken(dbid) {
+    if (tokens[dbid]) return Promise.resolve(tokens[dbid]);
+    var h = { "QB-Realm-Hostname": CONFIG.realm };
+    if (CONFIG.appToken.indexOf("__") !== 0) h["QB-App-Token"] = CONFIG.appToken;
+    return fetch("https://api.quickbase.com/v1/auth/temporary/" + dbid, { credentials: "include", headers: h })
+      .then(check).then(function (j) { return (tokens[dbid] = j.temporaryAuthorization); });
+  }
+  function api(dbid, method, path, body) {
+    return tempToken(dbid).then(function (tok) {
+      return fetch("https://api.quickbase.com/v1" + path, {
+        method: method, body: body ? JSON.stringify(body) : undefined,
+        headers: { "QB-Realm-Hostname": CONFIG.realm, "Authorization": "QB-TEMP-TOKEN " + tok, "Content-Type": "application/json" }
+      }).then(check);
+    });
+  }
+  // Report's own filter/columns/sort, run as a query with Record ID# added.
+  function runReport(reportId) {
+    var t = CONFIG.timeCards.table, rid = CONFIG.timeCards.fid.rid;
+    return api(t, "GET", "/reports/" + reportId + "?tableId=" + t).then(function (rep) {
+      var q = rep.query || {};
+      var body = { from: t, select: [rid].concat((q.fields || []).filter(function (id) { return id !== rid; })), where: (q.filter || "").split("_curuser_").join(userRef()), options: { skip: 0, top: 1000 } };
+      if (q.sortBy && q.sortBy.length) body.sortBy = q.sortBy;
+      return api(t, "POST", "/records/query", body);
+    });
+  }
+  function myEmployee() {
+    var e = CONFIG.employees, f = e.fid;
+    return api(e.table, "POST", "/records/query", { from: e.table, select: [f.name, f.cur, f.last, f.title, f.dept, f.location], where: "{" + f.user + ".TV.'" + userRef() + "'}" });
+  }
+  function editUrl(rid) { return "https://" + CONFIG.realm + "/db/" + CONFIG.timeCards.table + "?a=er&rid=" + encodeURIComponent(rid); }
+
+  /* ---------- data shaping ---------- */
+  function rows(rep) {
+    var f = CONFIG.timeCards.fid;
+    return (rep.data || []).map(function (r) {
+      var g = function (id) { return r[id] ? r[id].value : null; };
+      var days = f.days.map(function (id) { return num(g(id)); });
+      var total = g(f.total);
+      return { rid: g(f.rid), project: g(f.project) || "", title: g(f.title) || "", days: days,
+               total: total == null ? days.reduce(function (a, b) { return a + b; }, 0) : num(total) };
+    });
+  }
+  function sumDays(rs) { var d = [0, 0, 0, 0, 0, 0, 0]; rs.forEach(function (r) { r.days.forEach(function (h, i) { d[i] += h; }); }); return d; }
+  function sumTotal(rs) { return rs.reduce(function (a, r) { return a + r.total; }, 0); }
+  function byProject(rs) {
+    var m = {};
+    rs.forEach(function (r) { var k = r.project || r.title || "Unassigned"; m[k] = (m[k] || 0) + r.total; });
+    var list = Object.keys(m).map(function (k) { return { name: k, value: Math.round(m[k] * 100) / 100 }; })
+      .filter(function (x) { return x.value > 0; }).sort(function (a, b) { return b.value - a.value; });
+    if (list.length > 6) {
+      var rest = list.slice(5).reduce(function (a, x) { return a + x.value; }, 0);
+      list = list.slice(0, 5).concat([{ name: "Other (" + (list.length - 5) + ")", value: rest }]);
+    }
+    return list;
+  }
+
+  /* ---------- ECharts ---------- */
+  var charts = {}, state = null;
+  function palette() {
+    var dark = document.documentElement.getAttribute("data-bs-theme") === "dark";
+    return {
+      dark: dark,
+      accent: cssVar("--mh-accent"), muted: cssVar("--mh-muted-series"),
+      text: cssVar("--bs-body-color"), sub: cssVar("--bs-secondary-color"), grid: cssVar("--bs-border-color-translucent"),
+      surface: cssVar("--bs-body-bg"),
+      cats: dark ? ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#9085e9"]
+                 : ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#4a3aa7"]
+    };
+  }
+  function chart(id) {
+    if (charts[id]) charts[id].dispose();
+    charts[id] = echarts.init($(id), null, { renderer: "svg" });
+    return charts[id];
+  }
+  // Daily hours scale: always at least an 8-hour day, growing only when a day goes past 8.
+  function hoursAxis(v) {
+    var steps = [8, 10, 12, 16, 20, 24], max = Math.ceil(v / 4) * 4;
+    for (var i = 0; i < steps.length; i++) if (v <= steps[i]) { max = steps[i]; break; }
+    return { min: 0, max: max, interval: max <= 12 ? 2 : 4 };
+  }
+  function drawCharts() {
+    if (!state || !window.echarts) return;
+    var p = palette(), cur = state.dailyCur, last = state.dailyLast;
+    var labels = DAY_SHORT.map(function (d, i) { return d + "\n" + (i === now.getDay() ? "Today" : fmtDate(addDays(wkCur, i))); });
+
+    var ax = hoursAxis(Math.max.apply(null, cur.concat(last)));
+    chart("dailyChart").setOption({
+      textStyle: { fontFamily: "inherit" },
+      grid: { left: 8, right: 8, top: 40, bottom: 4, containLabel: true },
+      legend: { top: 0, right: 0, itemWidth: 10, itemHeight: 10, icon: "roundRect", textStyle: { color: p.sub } },
+      tooltip: { trigger: "axis", axisPointer: { type: "shadow" }, backgroundColor: p.surface, borderColor: p.grid, textStyle: { color: p.text },
+                 valueFormatter: function (v) { return fmtH(v) + " hrs"; } },
+      xAxis: { type: "category", data: labels, axisTick: { show: false }, axisLine: { lineStyle: { color: p.grid } },
+               axisLabel: { color: p.sub, lineHeight: 16 } },
+      yAxis: { type: "value", min: ax.min, max: ax.max, interval: ax.interval, splitLine: { lineStyle: { color: p.grid } }, axisLabel: { color: p.sub } },
+      series: [
+        { name: "Last week", type: "bar", data: last, barMaxWidth: 24, barGap: "10%", itemStyle: { color: p.muted, borderRadius: [4, 4, 0, 0] } },
+        { name: "This week", type: "bar", data: cur, barMaxWidth: 24, itemStyle: { color: p.accent, borderRadius: [4, 4, 0, 0] },
+          label: { show: true, position: "top", color: p.sub, fontSize: 11, fontWeight: 600, formatter: function (x) { return x.value > 0 ? fmtH(x.value) : ""; } } }
+      ]
+    });
+
+    var proj = state.projects;
+    chart("projChart").setOption({
+      textStyle: { fontFamily: "inherit" },
+      color: p.cats,
+      tooltip: { trigger: "item", backgroundColor: p.surface, borderColor: p.grid, textStyle: { color: p.text },
+                 formatter: function (x) { return esc(x.name) + "<br><b>" + fmtH(x.value) + " hrs</b> (" + Math.round(x.percent) + "%)"; } },
+      legend: { bottom: 0, left: "center", type: "plain", icon: "roundRect", itemWidth: 10, itemHeight: 10, itemGap: 12,
+                textStyle: { color: p.sub, width: 170, overflow: "truncate" } },
+      title: proj.length ? { text: fmtH(state.curRows) , subtext: "hrs", left: "center", top: "31%",
+               textStyle: { color: p.text, fontSize: 26, fontWeight: 650 }, subtextStyle: { color: p.sub } }
+             : { text: "No hours logged yet this week.", left: "center", top: "middle", textStyle: { color: p.sub, fontSize: 13, fontWeight: 400 } },
+      series: [{ type: "pie", radius: ["46%", "66%"], center: ["50%", "38%"], avoidLabelOverlap: true,
+                 itemStyle: { borderColor: p.surface, borderWidth: 2, borderRadius: 4 },
+                 label: { show: false }, emphasis: { scale: true, scaleSize: 6 }, data: proj }]
+    });
+
+    var target = CONFIG.weeklyTarget, val = state.cur;
+    chart("gauge").setOption({
+      series: [{
+        type: "gauge", startAngle: 90, endAngle: -270, min: 0, max: target, radius: "92%",
+        pointer: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
+        progress: { show: true, roundCap: true, width: 12, itemStyle: { color: "#fff" } },
+        axisLine: { lineStyle: { width: 12, color: [[1, "rgba(255,255,255,.18)"]] } },
+        title: { show: true, offsetCenter: [0, "28%"], color: "rgba(255,255,255,.75)", fontSize: 11 },
+        detail: { offsetCenter: [0, "-6%"], color: "#fff", fontSize: 24, fontWeight: 650,
+                  formatter: function () { return Math.round(target ? val / target * 100 : 0) + "%"; } },
+        data: [{ value: Math.min(val, target), name: "of " + target + " hrs" }]
+      }]
+    });
+  }
+  var rt; window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); }, 100); });
+
+  /* ---------- render ---------- */
+  var tables = { cur: [], last: [] }, activeTab = "cur";
+  function renderTable() {
+    var rs = tables[activeTab], start = activeTab === "cur" ? wkCur : wkLast;
+    $("openReport").href = "https://" + CONFIG.realm + "/db/" + CONFIG.timeCards.table + "?a=q&qid=" + (activeTab === "cur" ? CONFIG.timeCards.reportCurrent : CONFIG.timeCards.reportLast);
+    if (!rs.length) { $("tableWrap").innerHTML = '<p class="text-center text-body-secondary py-5 mb-0">No time cards ' + (activeTab === "cur" ? "this week yet." : "for last week.") + "</p>"; return; }
+    var today = activeTab === "cur" ? now.getDay() : -1;
+    var h = '<table class="table table-hover align-middle mb-0" style="min-width:860px"><thead><tr><th class="ps-4">Project / time card</th>';
+    for (var i = 0; i < 7; i++) h += '<th class="n' + (i === today ? " text-primary" : "") + '">' + DAY_SHORT[i] + '<div class="fw-normal small">' + esc(fmtDate(addDays(start, i))) + "</div></th>";
+    h += '<th class="text-end pe-4">Total</th></tr></thead><tbody>';
+    rs.forEach(function (r) {
+      var title = r.title || r.project || "(untitled)", proj = r.project && r.project !== title ? r.project : "";
+      h += "<tr" + (r.rid ? ' data-rid="' + esc(r.rid) + '" tabindex="0" title="Double-click to edit this time card"' : "") + '><td class="ps-4"><div class="fw-semibold">' + esc(title) + "</div>" +
+           (proj ? '<div class="small text-body-secondary">' + esc(proj) + "</div>" : "") + "</td>";
+      r.days.forEach(function (v) { h += '<td class="n num">' + (v > 0 ? '<span class="h-cell h-' + (v >= 8 ? 3 : v >= 4 ? 2 : 1) + '">' + fmtH(v) + "</span>" : '<span class="text-body-tertiary">\u2013</span>') + "</td>"; });
+      h += '<td class="text-end pe-4 fw-bold num">' + fmtH(r.total) + "</td></tr>";
+    });
+    var d = sumDays(rs);
+    h += '</tbody><tfoot class="fw-bold"><tr><td class="ps-4">Total</td>' + d.map(function (v) { return '<td class="n num">' + (v ? fmtH(v) : "\u2013") + "</td>"; }).join("") +
+         '<td class="text-end pe-4 num">' + fmtH(sumTotal(rs)) + "</td></tr></tfoot></table>";
+    $("tableWrap").innerHTML = h;
+  }
+  document.querySelectorAll("[data-tab]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      activeTab = b.getAttribute("data-tab");
+      document.querySelectorAll("[data-tab]").forEach(function (x) { x.classList.toggle("active", x === b); });
+      renderTable();
+    });
+  });
+  function openRow(e) {
+    var tr = e.target.closest && e.target.closest("tr[data-rid]");
+    if (tr && (e.type === "dblclick" || e.key === "Enter")) window.open(editUrl(tr.getAttribute("data-rid")), "_blank", "noopener");
+  }
+  $("tableWrap").addEventListener("dblclick", openRow);
+  $("tableWrap").addEventListener("keydown", openRow);
+
+  function render(d) {
+    var curRows = rows(d.cur), lastRows = rows(d.last);
+    var cur = d.emp.cur != null ? num(d.emp.cur) : sumTotal(curRows);
+    var last = d.emp.last != null ? num(d.emp.last) : sumTotal(lastRows);
+    var first = (d.emp.name || "").split(" ")[0];
+    $("greeting").textContent = greet(now) + (first ? ", " + first : "");
+    $("subline").textContent = ["Week of " + weekRange(wkCur), d.emp.title, d.emp.dept, d.emp.location].filter(Boolean).join("  \u00B7  ");
+    $("curHours").innerHTML = fmtH(cur) + '<span class="fs-4 opacity-75 ms-2">hrs</span>';
+    $("curRange").textContent = weekRange(wkCur);
+    var left = Math.max(0, CONFIG.weeklyTarget - cur);
+    $("toGo").innerHTML = left > 0 ? fmtH(left) + " hrs to " + CONFIG.weeklyTarget : '<i class="bi bi-check-lg me-1"></i>' + CONFIG.weeklyTarget + "-hour week reached";
+    $("lastHours").innerHTML = fmtH(last) + '<span class="fs-6 text-body-secondary ms-1">hrs</span>';
+    $("lastRange").textContent = weekRange(wkLast);
+    var delta = Math.round((cur - last) * 100) / 100;
+    $("delta").innerHTML = '<i class="bi ' + (delta > 0 ? "bi-arrow-up" : delta < 0 ? "bi-arrow-down" : "bi-dash") + '"></i> ' + (delta > 0 ? "+" : "") + fmtH(delta) + " hrs";
+    $("lastCards").textContent = lastRows.length;
+    var daily = sumDays(curRows), logged = daily.filter(function (h) { return h > 0; }).length;
+    $("avgDay").textContent = logged ? fmtH(sumTotal(curRows) / logged) : "0";
+    $("daysLogged").textContent = logged + " of 7";
+    var projects = byProject(curRows);
+    $("projCount").textContent = projects.length;
+
+    state = { cur: cur, curRows: sumTotal(curRows), dailyCur: daily, dailyLast: sumDays(lastRows), projects: projects };
+    drawCharts();
+
+    tables.cur = curRows; tables.last = lastRows;
+    $("cntCur").textContent = curRows.length; $("cntLast").textContent = lastRows.length;
+    renderTable();
+    $("updated").textContent = "Updated " + new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    if (d.emp.missing) showError("No Employees record is linked to " + (VIEW_AS || "your Quickbase user") + ", so the totals come from the time card reports instead.", "Heads up.", "warning");
+    if (viewAsNotice()) showError(viewAsNotice(), "Heads up.", "warning");
+    if (VIEW_AS) {
+      $("viewAsName").textContent = d.emp.name ? d.emp.name + " (" + VIEW_AS + ")" : VIEW_AS;
+      $("viewAsExit").href = exitViewAsUrl();
+      $("viewAsBanner").classList.remove("d-none"); $("viewAsBanner").classList.add("d-flex");
+    }
+  }
+  function showError(msg, title, kind) {
+    var el = $("error");
+    el.className = "alert alert-" + (kind || "danger") + " d-flex gap-2 align-items-start";
+    $("errorTitle").textContent = title || "Couldn't load your hours.";
+    $("errorMsg").textContent = msg;
+  }
+
+  /* ---------- load ---------- */
+  function demo() {
+    var f = CONFIG.timeCards.fid, rid = 900000, today = now.getDay();
+    function rec(p, t, days) { var o = {}; o[f.rid] = { value: ++rid }; o[f.project] = { value: p }; o[f.title] = { value: t };
+      f.days.forEach(function (id, i) { o[id] = { value: days[i] }; }); o[f.total] = { value: days.reduce(function (a, b) { return a + b; }, 0) }; return o; }
+    var upTo = function (a) { return a.map(function (v, i) { return i <= today ? v : 0; }); };
+    var cur = { data: [
+      rec("LNG Vaporizer Skid \u2013 Sabine Pass", "Detail drawings rev C", upTo([0, 4, 3.5, 5, 2, 0, 0])),
+      rec("NPD \u2013 Bulk Tank Gen 3", "FEA review & design changes", upTo([0, 2.5, 3, 1, 4.5, 0, 0])),
+      rec("ECR 21844 \u2013 Valve manifold", "Update BOM and PDM release", upTo([0, 1, 1.5, 0, 1.5, 0, 0])),
+      rec("Administrative", "Team meeting / training", upTo([0, 0.5, 0, 1, 0.5, 0, 0])) ] };
+    var last = { data: [
+      rec("LNG Vaporizer Skid \u2013 Sabine Pass", "Detail drawings rev B", [0, 5, 4, 3, 4, 3, 0]),
+      rec("NPD \u2013 Bulk Tank Gen 3", "Concept layout", [0, 2, 3, 3.5, 2, 2, 0]),
+      rec("Customer CSR 1187", "Field issue support", [0, 0, 1, 1.5, 1, 1.5, 0]),
+      rec("Administrative", "Team meeting", [0, 1, 0, 0.5, 0.5, 0.5, 0]) ] };
+    var sum = function (r) { return r.data.reduce(function (a, x) { return a + x[f.total].value; }, 0); };
+    return Promise.resolve({ emp: { name: "Kris Tenney", title: "Design Engineer", dept: "Engineering", location: "Prague, OK", cur: sum(cur), last: sum(last) }, cur: cur, last: last });
+  }
+  function live() {
+    var f = CONFIG.employees.fid;
+    return checkViewAs().then(function () {
+      return Promise.all([myEmployee(), runReport(CONFIG.timeCards.reportCurrent), runReport(CONFIG.timeCards.reportLast)]);
+    }).then(function (res) {
+      var e = (res[0].data || [])[0] || {}, g = function (id) { return e[id] ? e[id].value : null; };
+      return { emp: { name: g(f.name), title: g(f.title), dept: g(f.dept), location: g(f.location), cur: g(f.cur), last: g(f.last), missing: !(res[0].data || []).length },
+               cur: res[1], last: res[2] };
+    });
+  }
+  function load() {
+    $("error").className = "alert d-none";
+    if (!window.echarts) { showError("The ECharts library didn't load from cdn.jsdelivr.net (it may be blocked on this network)."); }
+    (isDemo ? demo() : live()).then(render).catch(function (err) { showError(err && err.message ? err.message : String(err)); });
+  }
+  if (isDemo) $("demoBadge").classList.remove("d-none");
+
+  /* ---------- theme toggle (remembered in this browser) ---------- */
+  function savedTheme() { try { var t = localStorage.getItem(THEME_KEY); return t === "light" || t === "dark" ? t : "auto"; } catch (e) { return "auto"; } }
+  function applyTheme(choice) {
+    var dark = choice === "dark" || (choice === "auto" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-bs-theme", dark ? "dark" : "light");
+    document.querySelectorAll("[data-theme-choice]").forEach(function (b) {
+      var on = b.getAttribute("data-theme-choice") === choice;
+      b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on));
+    });
+    drawCharts(); // ECharts doesn't read CSS variables, so redraw with the new colors
+  }
+  document.querySelectorAll("[data-theme-choice]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var c = b.getAttribute("data-theme-choice");
+      try { if (c === "auto") localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, c); } catch (e) {}
+      applyTheme(c);
+    });
+  });
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { if (savedTheme() === "auto") applyTheme("auto"); });
+  applyTheme(savedTheme());
+
+  $("refresh").addEventListener("click", function () { tokens = {}; load(); });
+  load();
+})();
+</script>
+</body>
+</html>

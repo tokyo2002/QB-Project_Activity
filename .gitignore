@@ -1,0 +1,9 @@
+# Local credentials (1Password references) — never commit; see .qb.env.example
+.qb.env
+
+# Personal Claude Code settings
+.claude/settings.local.json
+
+# macOS / editor clutter
+.DS_Store
+__pycache__/

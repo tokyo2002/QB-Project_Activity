@@ -1,0 +1,872 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Hours</title>
+<script>
+  // Saved theme choice (per browser): "light" | "dark"; absent = follow the system setting.
+  try { var t = localStorage.getItem("qbMyHours.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+</script>
+<!--
+  Project Activity - "My Hours" dashboard (Quickbase code page)
+
+  Reads only. Data sources:
+    Employees   (bhm98v33q)  fid 53 Current Week's Hours, fid 54 Last Week's Hours  (summary fields)
+    Time Cards  (bhm9822gc)  report 6  "My Current Time Cards"
+                             report 24 "My Last Week's Time Cards"
+
+  Auth: the signed-in user's Quickbase session, exchanged for temporary tokens.
+  The app requires app tokens, so __QB_APP_TOKEN__ is substituted at deploy time
+  (scripts/deploy_dashboard_codepages.py). Open the file locally (or add ?demo=1)
+  to render with sample data.
+-->
+<style>
+:root {
+  color-scheme: light;
+  --page:          #f4f3f0;
+  --surface-1:     #fcfcfb;
+  --surface-2:     #f0efec;
+  --border:        #e4e2dd;
+  --grid:          #e9e7e2;
+  --text-primary:  #0b0b0b;
+  --text-secondary:#52514e;
+  --text-muted:    #8a8984;
+  --series-1:      #2a78d6;   /* this week */
+  --series-1-wash: rgba(42,120,214,.10);
+  --series-2:      #b9b7b0;   /* last week (de-emphasis) */
+  --accent-ink:    #1c5cab;
+  --good:          #0ca30c;
+  --good-ink:      #006300;
+  --heat-1:        #eaf2fd;
+  --heat-2:        #cde2fb;
+  --heat-3:        #9ec5f4;
+  --hero-a:        #0d366b;
+  --hero-b:        #2a78d6;
+  --shadow:        0 1px 2px rgba(20,20,18,.04), 0 4px 16px rgba(20,20,18,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page:          #111110;
+    --surface-1:     #1a1a19;
+    --surface-2:     #232321;
+    --border:        #2e2e2b;
+    --grid:          #2a2a28;
+    --text-primary:  #ffffff;
+    --text-secondary:#c3c2b7;
+    --text-muted:    #8d8c85;
+    --series-1:      #3987e5;
+    --series-1-wash: rgba(57,135,229,.14);
+    --series-2:      #5c5b56;
+    --accent-ink:    #86b6ef;
+    --good-ink:      #5fd35f;
+    --heat-1:        #172538;
+    --heat-2:        #1c3354;
+    --heat-3:        #1c4a80;
+    --hero-a:        #0d2747;
+    --hero-b:        #1c5cab;
+    --shadow:        0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --page:#111110; --surface-1:#1a1a19; --surface-2:#232321; --border:#2e2e2b; --grid:#2a2a28;
+  --text-primary:#ffffff; --text-secondary:#c3c2b7; --text-muted:#8d8c85;
+  --series-1:#3987e5; --series-1-wash:rgba(57,135,229,.14); --series-2:#5c5b56; --accent-ink:#86b6ef;
+  --good-ink:#5fd35f; --heat-1:#172538; --heat-2:#1c3354; --heat-3:#1c4a80;
+  --hero-a:#0d2747; --hero-b:#1c5cab; --shadow:0 1px 2px rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.25);
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--page);
+  color: var(--text-primary);
+  font: 14px/1.45 "Inter", system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap { max-width: 1240px; margin: 0 auto; padding: 28px 24px 48px; }
+a { color: var(--accent-ink); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.num { font-variant-numeric: tabular-nums; }
+
+/* ---------- header ---------- */
+.top { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--text-muted); }
+h1 { font-size: 28px; line-height: 1.15; font-weight: 650; margin: 4px 0 6px; letter-spacing: -.01em; }
+.sub { color: var(--text-secondary); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.sub .dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-muted); }
+.actions { display: flex; gap: 8px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px;
+  border-radius: 9px; border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-primary); font: inherit; font-weight: 550; cursor: pointer; text-decoration: none !important;
+  transition: background .15s, border-color .15s, transform .1s;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+.btn.primary:hover { filter: brightness(1.06); background: var(--series-1); }
+.btn svg { width: 16px; height: 16px; }
+.theme { display: inline-flex; align-items: center; gap: 2px; height: 36px; padding: 3px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-1); }
+.theme button {
+  display: grid; place-items: center; width: 30px; height: 28px; border: 0; border-radius: 6px;
+  background: transparent; color: var(--text-muted); cursor: pointer; transition: background .15s, color .15s;
+}
+.theme button:hover { color: var(--text-primary); }
+.theme button[aria-pressed="true"] { background: var(--surface-2); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--border); }
+.theme button:focus-visible { outline: 2px solid var(--series-1); outline-offset: 1px; }
+.theme svg { width: 16px; height: 16px; }
+
+/* ---------- KPI grid ---------- */
+.kpis { display: grid; grid-template-columns: minmax(0,1.5fr) minmax(0,1fr) minmax(0,1fr); gap: 16px; margin-bottom: 16px; }
+.card {
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px;
+  box-shadow: var(--shadow); padding: 20px 22px; min-width: 0;
+}
+.hero {
+  position: relative; overflow: hidden; border: none; color: #fff;
+  background: radial-gradient(120% 140% at 100% 0%, var(--hero-b) 0%, var(--hero-a) 70%);
+  display: flex; align-items: center; justify-content: space-between; gap: 20px;
+}
+.hero::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(135deg, rgba(255,255,255,.035) 0 2px, transparent 2px 14px);
+}
+.hero .label { font-size: 13px; font-weight: 600; letter-spacing: .02em; opacity: .85; }
+.hero .value { font-size: 64px; line-height: 1; font-weight: 650; letter-spacing: -.03em; margin: 10px 0 8px; }
+.hero .value small { font-size: 20px; font-weight: 550; opacity: .7; margin-left: 6px; letter-spacing: 0; }
+.hero .meta { font-size: 13px; opacity: .85; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.pill { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: 999px; background: rgba(255,255,255,.14); font-weight: 600; font-size: 12px; }
+.pill svg { width: 13px; height: 13px; }
+.ring { position: relative; width: 132px; height: 132px; flex: none; z-index: 1; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring .track { stroke: rgba(255,255,255,.16); }
+.ring .fill { stroke: #fff; transition: stroke-dashoffset 1s cubic-bezier(.2,.8,.2,1); }
+.ring .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+.ring .pct { font-size: 24px; font-weight: 650; line-height: 1; }
+.ring .of { font-size: 11px; opacity: .75; margin-top: 3px; }
+
+.stat .label { font-size: 13px; color: var(--text-secondary); font-weight: 550; display: flex; align-items: center; gap: 8px; }
+.stat .key { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.stat .value { font-size: 36px; font-weight: 650; letter-spacing: -.02em; margin: 8px 0 6px; line-height: 1.05; }
+.stat .value small { font-size: 15px; color: var(--text-muted); font-weight: 550; margin-left: 4px; letter-spacing: 0; }
+.stat .foot { color: var(--text-secondary); font-size: 13px; }
+.delta { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; color: var(--text-primary); }
+.delta svg { width: 14px; height: 14px; }
+.minis { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.mini .k { font-size: 12px; color: var(--text-muted); }
+.mini .v { font-size: 18px; font-weight: 650; }
+
+/* ---------- charts ---------- */
+.charts { display: grid; grid-template-columns: minmax(0,1.6fr) minmax(0,1fr); gap: 16px; margin-bottom: 16px; }
+.card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 12px; }
+.card-title { font-size: 15px; font-weight: 650; margin: 0; }
+.card-sub { font-size: 12.5px; color: var(--text-muted); margin-top: 2px; }
+.legend { display: flex; gap: 14px; font-size: 12.5px; color: var(--text-secondary); flex-wrap: wrap; }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+.legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; width: 100%; overflow: visible; }
+.axis text { fill: var(--text-muted); font-size: 11.5px; }
+.axis .day { fill: var(--text-secondary); font-weight: 550; }
+.axis .today { fill: var(--text-primary); font-weight: 700; }
+.gridline { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
+.baseline { stroke: var(--border); stroke-width: 1; shape-rendering: crispEdges; }
+.band { fill: transparent; cursor: default; }
+.band:hover, .band.on { fill: var(--series-1-wash); }
+.bar-label { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
+.tip {
+  position: absolute; pointer-events: none; z-index: 5; min-width: 168px;
+  background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.14); padding: 10px 12px; font-size: 12.5px;
+  opacity: 0; transform: translateY(4px); transition: opacity .12s, transform .12s;
+}
+.tip.show { opacity: 1; transform: none; }
+.tip .t { font-weight: 650; margin-bottom: 6px; }
+.tip .r { display: flex; justify-content: space-between; gap: 16px; color: var(--text-secondary); }
+.tip .r b { color: var(--text-primary); font-weight: 650; }
+.tip i { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 6px; }
+
+.proj { display: flex; flex-direction: column; gap: 12px; }
+.proj-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; }
+.proj-name { font-size: 13px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-val { font-size: 13px; font-weight: 650; text-align: right; }
+.proj-track { grid-column: 1 / -1; height: 10px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
+.proj-fill { height: 100%; border-radius: 0 4px 4px 0; background: var(--series-1); width: 0; transition: width .9s cubic-bezier(.2,.8,.2,1); }
+.proj-fill.other { background: var(--series-2); }
+.empty { color: var(--text-muted); font-size: 13px; padding: 28px 0; text-align: center; }
+
+/* ---------- tables ---------- */
+.tabs { display: flex; gap: 4px; padding: 4px; background: var(--surface-2); border-radius: 11px; width: max-content; max-width: 100%; overflow-x: auto; }
+.tab { flex: none; }
+.tab {
+  border: 0; background: transparent; font: inherit; font-weight: 600; color: var(--text-secondary);
+  padding: 7px 14px; border-radius: 8px; cursor: pointer; display: inline-flex; gap: 8px; align-items: center;
+}
+.tab .count { font-size: 11.5px; padding: 1px 7px; border-radius: 999px; background: var(--border); color: var(--text-secondary); }
+.tab[aria-selected="true"] { background: var(--surface-1); color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+.tab[aria-selected="true"] .count { background: var(--series-1); color: #fff; }
+.table-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.tbl-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+table { border-collapse: separate; border-spacing: 0; width: 100%; min-width: 860px; }
+th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: .05em; color: var(--text-muted); background: var(--surface-2); position: sticky; top: 0; }
+th.n, td.n { text-align: center; }
+th.today-col { color: var(--accent-ink); }
+td { font-size: 13px; }
+tbody tr { transition: background .12s; }
+tbody tr[data-rid] { cursor: pointer; user-select: none; }
+tbody tr[data-rid]:focus-visible { outline: 2px solid var(--series-1); outline-offset: -2px; }
+.hint { font-size: 12px; color: var(--text-muted); margin-top: 10px; }
+tbody tr:hover td { background: var(--surface-2); }
+td.title { white-space: normal; min-width: 220px; max-width: 360px; }
+td.title .p { font-size: 12px; color: var(--text-muted); margin-top: 1px; }
+td.title .t { font-weight: 550; }
+td.n .h { display: inline-block; min-width: 38px; padding: 3px 6px; border-radius: 6px; font-weight: 600; }
+td.n .h.l1 { background: var(--heat-1); }
+td.n .h.l2 { background: var(--heat-2); }
+td.n .h.l3 { background: var(--heat-3); }
+td.n .z { color: var(--text-muted); opacity: .6; }
+td.tot { font-weight: 700; text-align: right; }
+th.tot { text-align: right; }
+tfoot td { background: var(--surface-2); font-weight: 700; border-bottom: 0; }
+tbody tr:last-child td { border-bottom-color: var(--border); }
+
+/* ---------- states ---------- */
+.skel { background: linear-gradient(90deg, var(--surface-2) 0%, var(--border) 50%, var(--surface-2) 100%); background-size: 200% 100%; animation: sh 1.2s infinite; border-radius: 8px; color: transparent !important; }
+@keyframes sh { to { background-position: -200% 0; } }
+.banner { display: none; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 12px; margin-bottom: 16px; border: 1px solid #d03b3b55; background: #d03b3b14; color: var(--text-primary); }
+.banner.show { display: flex; }
+.banner svg { width: 18px; height: 18px; flex: none; color: #d03b3b; margin-top: 1px; }
+.banner.info { border-color: var(--series-1); background: var(--series-1-wash); }
+.banner.info svg { color: var(--series-1); }
+.banner.info a { font-weight: 600; margin-left: 6px; }
+.demo-flag { display: none; font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--surface-2); border: 1px dashed var(--border); padding: 3px 9px; border-radius: 999px; }
+.demo .demo-flag { display: inline-block; }
+.foot-note { color: var(--text-muted); font-size: 12px; margin-top: 16px; display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+
+.fade { animation: fade .5s ease both; }
+@keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+@media (max-width: 980px) {
+  .kpis { grid-template-columns: minmax(0,1fr) minmax(0,1fr); }
+  .kpis .hero { grid-column: 1 / -1; }
+  .charts { grid-template-columns: minmax(0,1fr); }
+}
+@media (max-width: 560px) {
+  .wrap { padding: 18px 16px 32px; }
+  .kpis { grid-template-columns: minmax(0,1fr); }
+  .hero { padding: 18px; gap: 12px; }
+  .card { padding: 16px; }
+  .card-head { flex-direction: column; }
+  .actions { width: 100%; }
+  .actions .btn { flex: 1; justify-content: center; }
+  .theme { flex: none; }
+  .hero .value { font-size: 46px; }
+  .ring { width: 92px; height: 92px; }
+  .ring .pct { font-size: 19px; }
+  h1 { font-size: 24px; }
+}
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+
+  <header class="top">
+    <div>
+      <div class="eyebrow">Project Activity &#xB7; My Hours <span class="demo-flag">Sample data</span></div>
+      <h1 id="greeting"><span class="skel">Good morning, Someone</span></h1>
+      <div class="sub" id="subline"><span class="skel">Week of &#x2014; &#xB7; Department &#xB7; Location</span></div>
+    </div>
+    <div class="actions">
+      <a class="btn" href="https://chartindustries.quickbase.com/nav/app/bg86uwfcw" target="_top" title="Go to the Project Activity app home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5L12 3l9 7.5"/><path d="M5 9.5V20a1 1 0 0 0 1 1h4v-6h4v6h4a1 1 0 0 0 1-1V9.5"/></svg>
+        App home
+      </a>
+      <div class="theme" role="group" aria-label="Color theme">
+        <button type="button" data-theme-choice="auto" title="Match system" aria-label="Match system theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+        </button>
+        <button type="button" data-theme-choice="light" title="Light" aria-label="Light theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
+        </button>
+        <button type="button" data-theme-choice="dark" title="Dark" aria-label="Dark theme">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        </button>
+      </div>
+      <button class="btn" id="refresh" type="button" title="Reload data">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+        Refresh
+      </button>
+    </div>
+  </header>
+
+  <div class="banner info" id="viewAsBanner" role="status">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+    <div><b>Test mode.</b> Viewing as <b id="viewAsName"></b>: their hours and time cards, read with your permissions. <a id="viewAsExit" href="#" target="_top">Exit test mode</a></div>
+  </div>
+
+  <div class="banner" id="error" role="alert">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 7v6M12 17h.01"/></svg>
+    <div><b id="errorTitle">Couldn't load your hours.</b> <span id="errorMsg"></span></div>
+  </div>
+
+  <section class="kpis">
+    <div class="card hero fade">
+      <div style="position:relative;z-index:1;min-width:0">
+        <div class="label">This week's hours</div>
+        <div class="value num" id="curHours">&#x2014;<small>hrs</small></div>
+        <div class="meta" id="heroMeta"><span class="skel">week range</span></div>
+      </div>
+      <div class="ring" aria-hidden="true">
+        <svg viewBox="0 0 120 120">
+          <circle class="track" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
+          <circle class="fill" id="ringFill" cx="60" cy="60" r="52" fill="none" stroke-width="10" stroke-linecap="round" stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
+        </svg>
+        <div class="center"><div><div class="pct num" id="ringPct">0%</div><div class="of" id="ringOf">of 40 hrs</div></div></div>
+      </div>
+    </div>
+
+    <div class="card stat fade" style="animation-delay:.05s">
+      <div class="label"><span class="key" style="background:var(--series-2)"></span>Last week's hours</div>
+      <div class="value num" id="lastHours">&#x2014;<small>hrs</small></div>
+      <div class="foot" id="lastRange">&nbsp;</div>
+      <div class="minis">
+        <div class="mini"><div class="k">Change vs last week</div><div class="v num" id="delta">&#x2014;</div></div>
+        <div class="mini"><div class="k">Time cards</div><div class="v num" id="lastCards">&#x2014;</div></div>
+      </div>
+    </div>
+
+    <div class="card stat fade" style="animation-delay:.1s">
+      <div class="label"><span class="key" style="background:var(--series-1)"></span>This week at a glance</div>
+      <div class="value num" id="avgDay">&#x2014;<small>hrs / day</small></div>
+      <div class="foot">Average across days with time logged</div>
+      <div class="minis">
+        <div class="mini"><div class="k">Days logged</div><div class="v num" id="daysLogged">&#x2014;</div></div>
+        <div class="mini"><div class="k">Projects</div><div class="v num" id="projCount">&#x2014;</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="card fade" style="animation-delay:.15s;margin-bottom:16px">
+    <div class="table-head">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" data-tab="cur">My current time cards <span class="count" id="cntCur">0</span></button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="last">My last week's time cards <span class="count" id="cntLast">0</span></button>
+      </div>
+      <a class="btn primary" id="openReport" href="#" target="_blank" rel="noopener">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6"/><path d="M20 4l-9 9"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>
+        Open report in Quickbase
+      </a>
+    </div>
+    <div class="tbl-wrap" id="tableWrap"><div class="skel" style="height:180px;border-radius:0"></div></div>
+    <div class="hint">Double-click a row to edit that time card in a new tab.</div>
+  </section>
+
+  <section class="charts" style="margin-bottom:0">
+    <div class="card fade" style="animation-delay:.2s">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Daily hours</h2>
+          <div class="card-sub">Sunday to Saturday, this week compared with last week</div>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--series-1)"></i>This week</span>
+          <span><i style="background:var(--series-2)"></i>Last week</span>
+        </div>
+      </div>
+      <div class="chart" id="dailyChart"><div class="skel" style="height:240px"></div></div>
+    </div>
+
+    <div class="card fade" style="animation-delay:.25s">
+      <div class="card-head">
+        <div>
+          <h2 class="card-title">Where this week went</h2>
+          <div class="card-sub">Hours by project, this week</div>
+        </div>
+      </div>
+      <div class="proj" id="projChart"><div class="skel" style="height:200px"></div></div>
+    </div>
+  </section>
+
+  <div class="foot-note">
+    <span>Totals: Employees &#x203A; Current Week's Hours / Last Week's Hours. Rows: Time Cards reports &#x201C;My Current Time Cards&#x201D; and &#x201C;My Last Week's Time Cards&#x201D;.</span>
+    <span id="updated"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  /* ---------------- configuration ---------------- */
+  var CONFIG = {
+    realm: "chartindustries.quickbase.com",
+    appId: "bg86uwfcw",
+    appToken: "__QB_APP_TOKEN__",
+    employees: { table: "bhm98v33q", fid: { user: 8, name: 47, cur: 53, last: 54, title: 7, dept: 40, location: 35 } },
+    timeCards: { table: "bhm9822gc", reportCurrent: 6, reportLast: 24,
+                 fid: { rid: 3, project: 300, title: 137, total: 6, days: [23, 10, 11, 12, 13, 14, 24] } },
+    weeklyTarget: 40
+  };
+  var DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var DAY_LONG = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+
+  var isDemo = /[?&]demo=1/.test(location.search) || !/quickbase\.com$/i.test(location.hostname);
+  if (isDemo) document.documentElement.classList.add("demo");
+  /* ---------------- "view as" test mode (app administrators only) ---------------- */
+  // ?viewAs=someone@chartindustries.com runs this page's queries for that user instead of
+  // the signed-in user. Queries still run with the viewer's own permissions.
+  var VIEW_AS = (function () {
+    var m = /[?&]viewAs=([^&#]*)/i.exec(location.search);
+    var v = m ? decodeURIComponent(m[1].replace(/\+/g, " ")).trim() : "";
+    return /^[^\s'"{}<>]+@[^\s'"{}<>]+$/.test(v) ? v : "";
+  })();
+  var viewAsAsked = /[?&]viewAs=/i.test(location.search), viewAsDenied = false;
+  function userRef() { return VIEW_AS || "_curuser_"; }
+  function isAppAdmin() {
+    var url = "/db/" + CONFIG.appId + "?a=API_GetUserRole" +
+      (CONFIG.appToken.indexOf("__") !== 0 ? "&apptoken=" + encodeURIComponent(CONFIG.appToken) : "");
+    return fetch(url, { credentials: "include" }).then(function (r) { return r.text(); }).then(function (t) {
+      var x = new DOMParser().parseFromString(t, "text/xml"), err = x.querySelector("errcode");
+      if (!err || err.textContent !== "0") return false;
+      return [].some.call(x.querySelectorAll("role > access"), function (a) { return a.getAttribute("id") === "1"; });
+    }).catch(function () { return false; });
+  }
+  function checkViewAs() {
+    if (!viewAsAsked || isDemo) return Promise.resolve();
+    if (!VIEW_AS) { viewAsDenied = "invalid"; return Promise.resolve(); }
+    return isAppAdmin().then(function (ok) { if (!ok) { viewAsDenied = "admin"; VIEW_AS = ""; } });
+  }
+  function exitViewAsUrl() {
+    var q = location.search.replace(/([?&])viewAs=[^&#]*(&?)/i, function (m, a, b) { return b ? a : ""; });
+    return location.pathname + q + location.hash;
+  }
+  function viewAsNotice() {
+    if (viewAsDenied === "admin") return "\"View as\" is only available to app administrators, so this shows your own hours.";
+    if (viewAsDenied === "invalid") return "The viewAs value isn't a valid email address, so this shows your own hours.";
+    return "";
+  }
+
+
+  /* ---------------- helpers ---------------- */
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+  function fmtH(h) {
+    h = Math.round(num(h) * 100) / 100;
+    return h.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  }
+  function startOfWeek(d) { var s = new Date(d.getFullYear(), d.getMonth(), d.getDate()); s.setDate(s.getDate() - s.getDay()); return s; }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function fmtDate(d, opts) { return d.toLocaleDateString(undefined, opts || { month: "short", day: "numeric" }); }
+  function weekRange(s) {
+    var e = addDays(s, 6);
+    var sameMonth = s.getMonth() === e.getMonth();
+    return fmtDate(s) + " \u2013 " + (sameMonth ? e.getDate() : fmtDate(e)) + ", " + e.getFullYear();
+  }
+  function greet(d) { var h = d.getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
+  // Daily hours scale: always at least an 8-hour day, growing only when a day goes past 8.
+  function hoursAxis(v) {
+    var steps = [8, 10, 12, 16, 20, 24], max = Math.ceil(v / 4) * 4;
+    for (var i = 0; i < steps.length; i++) if (v <= steps[i]) { max = steps[i]; break; }
+    return { min: 0, max: max, interval: max <= 12 ? 2 : 4 };
+  }
+
+  /* ---------------- Quickbase API ---------------- */
+  var tokens = {};
+  function tempToken(dbid) {
+    if (tokens[dbid]) return Promise.resolve(tokens[dbid]);
+    var headers = { "QB-Realm-Hostname": CONFIG.realm };
+    if (CONFIG.appToken && CONFIG.appToken.indexOf("__") !== 0) headers["QB-App-Token"] = CONFIG.appToken;
+    return fetch("https://api.quickbase.com/v1/auth/temporary/" + dbid, { method: "GET", credentials: "include", headers: headers })
+      .then(check).then(function (j) { tokens[dbid] = j.temporaryAuthorization; return tokens[dbid]; });
+  }
+  function check(r) {
+    if (r.ok) return r.json();
+    return r.text().then(function (t) {
+      var msg = t;
+      try { var j = JSON.parse(t); msg = (j.message || "") + (j.description ? " \u2014 " + j.description : ""); } catch (e) {}
+      throw new Error("Quickbase API " + r.status + ": " + msg);
+    });
+  }
+  function api(dbid, method, path, body) {
+    return tempToken(dbid).then(function (tok) {
+      return fetch("https://api.quickbase.com/v1" + path, {
+        method: method,
+        headers: { "QB-Realm-Hostname": CONFIG.realm, "Authorization": "QB-TEMP-TOKEN " + tok, "Content-Type": "application/json" },
+        body: body ? JSON.stringify(body) : undefined
+      }).then(check);
+    });
+  }
+  // Runs a report's own filter, columns and sort as a query, adding Record ID#
+  // (the report run endpoint only returns the report's columns, so rows couldn't be opened).
+  function runReport(reportId) {
+    var t = CONFIG.timeCards.table, rid = CONFIG.timeCards.fid.rid;
+    return api(t, "GET", "/reports/" + reportId + "?tableId=" + t).then(function (rep) {
+      var q = rep.query || {};
+      var body = {
+        from: t,
+        select: [rid].concat((q.fields || []).filter(function (id) { return id !== rid; })),
+        where: (q.filter || "").split("_curuser_").join(userRef()),
+        options: { skip: 0, top: 1000 }
+      };
+      if (q.sortBy && q.sortBy.length) body.sortBy = q.sortBy;
+      return api(t, "POST", "/records/query", body);
+    });
+  }
+  function recordUrl(rid) {
+    return "https://" + CONFIG.realm + "/db/" + CONFIG.timeCards.table + "?a=er&rid=" + encodeURIComponent(rid);
+  }
+  function openRecord(rid) {
+    window.open(recordUrl(rid), "_blank", "noopener");
+  }
+  function myEmployee() {
+    var e = CONFIG.employees, f = e.fid;
+    return api(e.table, "POST", "/records/query", {
+      from: e.table,
+      select: [f.name, f.cur, f.last, f.title, f.dept, f.location],
+      where: "{" + f.user + ".TV.'" + userRef() + "'}"
+    });
+  }
+
+  /* ---------------- normalise ---------------- */
+  function rowsFromReport(rep) {
+    var f = CONFIG.timeCards.fid;
+    return (rep.data || []).map(function (r) {
+      var g = function (id) { return r[id] ? r[id].value : null; };
+      var days = f.days.map(function (id) { return num(g(id)); });
+      var total = g(f.total);
+      return {
+        rid: g(f.rid),
+        project: g(f.project) || "",
+        title: g(f.title) || "",
+        days: days,
+        total: total == null ? days.reduce(function (a, b) { return a + b; }, 0) : num(total)
+      };
+    });
+  }
+  function sumDays(rows) {
+    var d = [0, 0, 0, 0, 0, 0, 0];
+    rows.forEach(function (r) { r.days.forEach(function (h, i) { d[i] += h; }); });
+    return d;
+  }
+  function sumTotal(rows) { return rows.reduce(function (a, r) { return a + r.total; }, 0); }
+
+  /* ---------------- render: header + KPIs ---------------- */
+  var now = new Date();
+  var wkCur = startOfWeek(now), wkLast = addDays(wkCur, -7);
+
+  function renderHeader(emp) {
+    var first = (emp.name || "").split(" ")[0];
+    $("greeting").textContent = greet(now) + (first ? ", " + first : "");
+    var bits = ["Week of " + weekRange(wkCur)];
+    if (emp.title) bits.push(emp.title);
+    if (emp.dept) bits.push(emp.dept);
+    if (emp.location) bits.push(emp.location);
+    $("subline").innerHTML = bits.map(esc).join('<span class="dot"></span>');
+  }
+
+  function animateNumber(el, to, suffix) {
+    if (window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches) { el.innerHTML = fmtH(to) + suffix; return; }
+    var start = performance.now(), dur = 900;
+    function step(t) {
+      var p = Math.min(1, (t - start) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.innerHTML = fmtH(to * e) + suffix;
+      if (p < 1) requestAnimationFrame(step); else el.innerHTML = fmtH(to) + suffix;
+    }
+    requestAnimationFrame(step);
+  }
+
+  function renderKpis(cur, last, curRows, lastRows) {
+    animateNumber($("curHours"), cur, "<small>hrs</small>");
+    animateNumber($("lastHours"), last, "<small>hrs</small>");
+
+    var target = CONFIG.weeklyTarget, pct = target ? cur / target : 0;
+    var C = 2 * Math.PI * 52;
+    requestAnimationFrame(function () { $("ringFill").style.strokeDashoffset = String(C * (1 - Math.min(1, pct))); });
+    $("ringPct").textContent = Math.round(pct * 100) + "%";
+    $("ringOf").textContent = "of " + target + " hrs";
+
+    var remaining = Math.max(0, target - cur);
+    var meta = '<span>' + esc(weekRange(wkCur)) + '</span>';
+    meta += remaining > 0
+      ? '<span class="pill">' + fmtH(remaining) + ' hrs to ' + target + '</span>'
+      : '<span class="pill"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5L20 7"/></svg>' + target + '-hour week reached</span>';
+    $("heroMeta").innerHTML = meta;
+
+    $("lastRange").textContent = weekRange(wkLast);
+    var d = Math.round((cur - last) * 100) / 100;
+    var arrow = d > 0 ? '<path d="M12 19V5M5 12l7-7 7 7"/>' : d < 0 ? '<path d="M12 5v14M19 12l-7 7-7-7"/>' : '<path d="M5 12h14"/>';
+    $("delta").innerHTML = '<span class="delta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">' + arrow + '</svg>' + (d > 0 ? "+" : "") + fmtH(d) + ' hrs</span>';
+    $("lastCards").textContent = lastRows.length;
+
+    var daily = sumDays(curRows);
+    var logged = daily.filter(function (h) { return h > 0; }).length;
+    var curFromRows = sumTotal(curRows);
+    $("avgDay").innerHTML = (logged ? fmtH(curFromRows / logged) : "0") + "<small>hrs / day</small>";
+    $("daysLogged").textContent = logged + " of 7";
+    var projects = {};
+    curRows.forEach(function (r) { projects[r.project || r.title || "Unassigned"] = 1; });
+    $("projCount").textContent = Object.keys(projects).length;
+  }
+
+  /* ---------------- render: daily column chart ---------------- */
+  var dailyData = null;
+  function renderDaily() {
+    if (!dailyData) return;
+    var host = $("dailyChart");
+    var W = Math.max(300, host.clientWidth), H = 260;
+    var m = { t: 22, r: 8, b: 40, l: 34 };
+    var iw = W - m.l - m.r, ih = H - m.t - m.b;
+    var cur = dailyData.cur, last = dailyData.last;
+    var ax = hoursAxis(Math.max.apply(null, cur.concat(last))), max = ax.max, ticks = [];
+    for (var t = 0; t <= max; t += ax.interval) ticks.push(t);
+    var band = iw / 7;
+    var bw = Math.min(24, Math.max(8, (band - 18) / 2));
+    var gap = 2;
+    var y = function (v) { return m.t + ih - (v / max) * ih; };
+    var todayIdx = now.getDay();
+
+    function col(x, v, cls, fill) {
+      var top = y(v), bottom = m.t + ih, h = bottom - top;
+      if (h <= 0) return "";
+      var r = Math.min(4, h, bw / 2);
+      return '<path class="' + cls + '" fill="' + fill + '" d="M' + x + ',' + bottom + 'V' + (top + r) +
+        'Q' + x + ',' + top + ' ' + (x + r) + ',' + top + 'H' + (x + bw - r) +
+        'Q' + (x + bw) + ',' + top + ' ' + (x + bw) + ',' + (top + r) + 'V' + bottom + 'Z"/>';
+    }
+
+    var s = '<svg viewBox="0 0 ' + W + ' ' + H + '" height="' + H + '" role="img" aria-label="Daily hours, this week versus last week">';
+    s += '<g class="axis">';
+    ticks.forEach(function (t) {
+      var yy = Math.round(y(t)) + .5;
+      s += '<line class="' + (t === 0 ? "baseline" : "gridline") + '" x1="' + m.l + '" x2="' + (W - m.r) + '" y1="' + yy + '" y2="' + yy + '"/>';
+      s += '<text x="' + (m.l - 8) + '" y="' + (yy + 4) + '" text-anchor="end">' + fmtH(t) + '</text>';
+    });
+    s += '</g>';
+    for (var i = 0; i < 7; i++) {
+      var bx = m.l + band * i;
+      s += '<rect class="band" data-i="' + i + '" x="' + bx + '" y="' + m.t + '" width="' + band + '" height="' + ih + '" rx="8"/>';
+    }
+    for (var j = 0; j < 7; j++) {
+      var cx = m.l + band * j + band / 2;
+      var x1 = cx - bw - gap / 2, x2 = cx + gap / 2;
+      s += col(x1, last[j], "bar-last", "var(--series-2)");
+      s += col(x2, cur[j], "bar-cur", "var(--series-1)");
+      if (cur[j] > 0) s += '<text class="bar-label num" x="' + (x2 + bw / 2) + '" y="' + (y(cur[j]) - 6) + '" text-anchor="middle">' + fmtH(cur[j]) + '</text>';
+      var dt = addDays(wkCur, j);
+      var isToday = j === todayIdx;
+      s += '<g class="axis"><text class="' + (isToday ? "today" : "day") + '" x="' + cx + '" y="' + (H - m.b + 18) + '" text-anchor="middle">' + DAY_SHORT[j] + '</text>';
+      s += '<text x="' + cx + '" y="' + (H - m.b + 33) + '" text-anchor="middle">' + (isToday ? "Today" : fmtDate(dt)) + '</text></g>';
+    }
+    s += '</svg><div class="tip" id="dailyTip"></div>';
+    host.innerHTML = s;
+
+    var tip = $("dailyTip");
+    host.querySelectorAll(".band").forEach(function (b) {
+      b.addEventListener("pointerenter", function () {
+        var i = +b.getAttribute("data-i");
+        b.classList.add("on");
+        var d1 = addDays(wkCur, i), d0 = addDays(wkLast, i);
+        var diff = cur[i] - last[i];
+        tip.innerHTML = '<div class="t">' + DAY_LONG[i] + '</div>' +
+          '<div class="r"><span><i style="background:var(--series-1)"></i>' + esc(fmtDate(d1)) + '</span><b class="num">' + fmtH(cur[i]) + ' hrs</b></div>' +
+          '<div class="r"><span><i style="background:var(--series-2)"></i>' + esc(fmtDate(d0)) + '</span><b class="num">' + fmtH(last[i]) + ' hrs</b></div>' +
+          '<div class="r" style="margin-top:4px;padding-top:4px;border-top:1px solid var(--border)"><span>Difference</span><b class="num">' + (diff > 0 ? "+" : "") + fmtH(diff) + '</b></div>';
+        var bx = m.l + band * i + band / 2;
+        var left = (bx / W) * host.clientWidth;
+        tip.style.left = Math.max(0, Math.min(host.clientWidth - 180, left - 90)) + "px";
+        tip.style.top = "0px";
+        tip.classList.add("show");
+      });
+      b.addEventListener("pointerleave", function () { b.classList.remove("on"); tip.classList.remove("show"); });
+    });
+  }
+
+  /* ---------------- render: project bars ---------------- */
+  function renderProjects(rows) {
+    var host = $("projChart");
+    var by = {};
+    rows.forEach(function (r) { var k = r.project || r.title || "Unassigned"; by[k] = (by[k] || 0) + r.total; });
+    var list = Object.keys(by).map(function (k) { return { name: k, h: by[k] }; })
+      .filter(function (x) { return x.h > 0; })
+      .sort(function (a, b) { return b.h - a.h; });
+    if (!list.length) { host.innerHTML = '<div class="empty">No hours logged yet this week.</div>'; return; }
+    if (list.length > 6) {
+      var rest = list.slice(5).reduce(function (a, x) { return a + x.h; }, 0);
+      list = list.slice(0, 5).concat([{ name: "Other (" + (list.length - 5) + " projects)", h: rest, other: true }]);
+    }
+    var max = list[0].h;
+    var total = list.reduce(function (a, x) { return a + x.h; }, 0);
+    host.innerHTML = list.map(function (x) {
+      var share = total ? Math.round(x.h / total * 100) : 0;
+      return '<div class="proj-row" title="' + esc(x.name) + ': ' + fmtH(x.h) + ' hrs (' + share + '% of week)">' +
+        '<div class="proj-name">' + esc(x.name) + '</div>' +
+        '<div class="proj-val num">' + fmtH(x.h) + ' <span style="color:var(--text-muted);font-weight:500">\u00B7 ' + share + '%</span></div>' +
+        '<div class="proj-track"><div class="proj-fill' + (x.other ? " other" : "") + '" data-w="' + (x.h / max * 100) + '"></div></div></div>';
+    }).join("");
+    requestAnimationFrame(function () {
+      host.querySelectorAll(".proj-fill").forEach(function (el) { el.style.width = el.getAttribute("data-w") + "%"; });
+    });
+  }
+
+  /* ---------------- render: tables ---------------- */
+  var tables = { cur: [], last: [] };
+  var activeTab = "cur";
+  function heat(h) { return h >= 8 ? "l3" : h >= 4 ? "l2" : "l1"; }
+  function renderTable() {
+    var rows = tables[activeTab];
+    var start = activeTab === "cur" ? wkCur : wkLast;
+    var rid = activeTab === "cur" ? CONFIG.timeCards.reportCurrent : CONFIG.timeCards.reportLast;
+    $("openReport").href = "https://" + CONFIG.realm + "/db/" + CONFIG.timeCards.table + "?a=q&qid=" + rid;
+    var wrap = $("tableWrap");
+    if (!rows.length) {
+      wrap.innerHTML = '<div class="empty">No time cards ' + (activeTab === "cur" ? "this week yet." : "for last week.") + '</div>';
+      return;
+    }
+    var todayIdx = activeTab === "cur" ? now.getDay() : -1;
+    var h = '<table><thead><tr><th>Project / time card</th>';
+    for (var i = 0; i < 7; i++) {
+      h += '<th class="n' + (i === todayIdx ? " today-col" : "") + '">' + DAY_SHORT[i] + '<div style="font-weight:500;text-transform:none;letter-spacing:0">' + esc(fmtDate(addDays(start, i))) + '</div></th>';
+    }
+    h += '<th class="tot">Total</th></tr></thead><tbody>';
+    rows.forEach(function (r) {
+      var title = r.title || r.project || "(untitled)";
+      var proj = r.project && r.project !== title ? r.project : "";
+      h += '<tr' + (r.rid ? ' data-rid="' + esc(r.rid) + '" tabindex="0" title="Double-click to edit this time card"' : "") + '><td class="title"><div class="t">' + esc(title) + '</div>' + (proj ? '<div class="p">' + esc(proj) + '</div>' : "") + '</td>';
+      r.days.forEach(function (v) {
+        h += '<td class="n num">' + (v > 0 ? '<span class="h ' + heat(v) + '">' + fmtH(v) + '</span>' : '<span class="z">\u2013</span>') + '</td>';
+      });
+      h += '<td class="tot num">' + fmtH(r.total) + '</td></tr>';
+    });
+    var d = sumDays(rows);
+    h += '</tbody><tfoot><tr><td>Total</td>' + d.map(function (v) { return '<td class="n num">' + (v ? fmtH(v) : "\u2013") + '</td>'; }).join("") +
+      '<td class="tot num">' + fmtH(sumTotal(rows)) + '</td></tr></tfoot></table>';
+    wrap.innerHTML = h;
+  }
+  $("tableWrap").addEventListener("dblclick", function (e) {
+    var tr = e.target.closest("tr[data-rid]");
+    if (tr) openRecord(tr.getAttribute("data-rid"));
+  });
+  $("tableWrap").addEventListener("keydown", function (e) {
+    var tr = e.target.closest && e.target.closest("tr[data-rid]");
+    if (tr && e.key === "Enter") openRecord(tr.getAttribute("data-rid"));
+  });
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.addEventListener("click", function () {
+      activeTab = t.getAttribute("data-tab");
+      document.querySelectorAll(".tab").forEach(function (x) { x.setAttribute("aria-selected", String(x === t)); });
+      renderTable();
+    });
+  });
+
+  /* ---------------- demo data ---------------- */
+  function demo() {
+    var demoRid = 900000;
+    function rec(project, title, days) { var o = {}; var f = CONFIG.timeCards.fid;
+      o[f.rid] = { value: ++demoRid }; o[f.project] = { value: project }; o[f.title] = { value: title };
+      f.days.forEach(function (id, i) { o[id] = { value: days[i] }; });
+      o[f.total] = { value: days.reduce(function (a, b) { return a + b; }, 0) }; return o; }
+    var today = now.getDay();
+    var curDays = function (arr) { return arr.map(function (v, i) { return i <= today ? v : 0; }); };
+    var cur = { data: [
+      rec("LNG Vaporizer Skid \u2013 Sabine Pass", "Detail drawings rev C", curDays([0, 4, 3.5, 5, 2, 0, 0])),
+      rec("NPD \u2013 Bulk Tank Gen 3", "FEA review & design changes", curDays([0, 2.5, 3, 1, 4.5, 0, 0])),
+      rec("ECR 21844 \u2013 Valve manifold", "Update BOM and PDM release", curDays([0, 1, 1.5, 0, 1.5, 0, 0])),
+      rec("Administrative", "Team meeting / training", curDays([0, 0.5, 0, 1, 0.5, 0, 0]))
+    ] };
+    var last = { data: [
+      rec("LNG Vaporizer Skid \u2013 Sabine Pass", "Detail drawings rev B", [0, 5, 4, 3, 4, 3, 0]),
+      rec("NPD \u2013 Bulk Tank Gen 3", "Concept layout", [0, 2, 3, 3.5, 2, 2, 0]),
+      rec("Customer CSR 1187", "Field issue support", [0, 0, 1, 1.5, 1, 1.5, 0]),
+      rec("Administrative", "Team meeting", [0, 1, 0, 0.5, 0.5, 0.5, 0])
+    ] };
+    var sum = function (r) { return r.data.reduce(function (a, x) { return a + x[CONFIG.timeCards.fid.total].value; }, 0); };
+    return Promise.resolve({
+      emp: { name: "Kris Tenney", title: "Design Engineer", dept: "Engineering", location: "Prague, OK", cur: sum(cur), last: sum(last) },
+      cur: cur, last: last
+    });
+  }
+
+  /* ---------------- load ---------------- */
+  function live() {
+    var f = CONFIG.employees.fid;
+    return checkViewAs().then(function () {
+      return Promise.all([myEmployee(), runReport(CONFIG.timeCards.reportCurrent), runReport(CONFIG.timeCards.reportLast)]);
+    }).then(function (res) {
+        var e = (res[0].data || [])[0] || {};
+        var g = function (id) { return e[id] ? e[id].value : null; };
+        return {
+          emp: { name: g(f.name), title: g(f.title), dept: g(f.dept), location: g(f.location),
+                 cur: g(f.cur), last: g(f.last), missing: !res[0].data || !res[0].data.length },
+          cur: res[1], last: res[2]
+        };
+      });
+  }
+
+  function load() {
+    $("error").classList.remove("show");
+    (isDemo ? demo() : live()).then(function (d) {
+      var curRows = rowsFromReport(d.cur), lastRows = rowsFromReport(d.last);
+      // Headline totals come from the Employees summary fields; fall back to the report rows.
+      var cur = d.emp.cur != null ? num(d.emp.cur) : sumTotal(curRows);
+      var last = d.emp.last != null ? num(d.emp.last) : sumTotal(lastRows);
+      renderHeader(d.emp);
+      renderKpis(cur, last, curRows, lastRows);
+      dailyData = { cur: sumDays(curRows), last: sumDays(lastRows) };
+      renderDaily();
+      renderProjects(curRows);
+      tables.cur = curRows; tables.last = lastRows;
+      $("cntCur").textContent = curRows.length;
+      $("cntLast").textContent = lastRows.length;
+      renderTable();
+      $("updated").textContent = "Updated " + new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+      if (d.emp.missing) showError("No Employees record is linked to " + (VIEW_AS || "your Quickbase user") + ", so the totals come from the time card reports instead.", "Heads up.");
+      if (viewAsNotice()) showError(viewAsNotice(), "Heads up.");
+      if (VIEW_AS) {
+        $("viewAsName").textContent = d.emp.name ? d.emp.name + " (" + VIEW_AS + ")" : VIEW_AS;
+        $("viewAsExit").href = exitViewAsUrl();
+        $("viewAsBanner").classList.add("show");
+      }
+    }).catch(function (err) {
+      showError(err && err.message ? err.message : String(err));
+    });
+  }
+  function showError(msg, title) { $("errorTitle").textContent = title || "Couldn't load your hours."; $("errorMsg").textContent = msg; $("error").classList.add("show"); }
+
+  /* ---------------- theme toggle (remembered in this browser) ---------------- */
+  var THEME_KEY = "qbMyHours.theme";
+  function currentTheme() {
+    var t = document.documentElement.getAttribute("data-theme");
+    return t === "light" || t === "dark" ? t : "auto";
+  }
+  function setTheme(choice) {
+    if (choice === "auto") document.documentElement.removeAttribute("data-theme");
+    else document.documentElement.setAttribute("data-theme", choice);
+    try {
+      if (choice === "auto") localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, choice);
+    } catch (e) {}
+    document.querySelectorAll("[data-theme-choice]").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.getAttribute("data-theme-choice") === choice));
+    });
+  }
+  document.querySelectorAll("[data-theme-choice]").forEach(function (b) {
+    b.addEventListener("click", function () { setTheme(b.getAttribute("data-theme-choice")); });
+  });
+  setTheme(currentTheme());
+
+  $("refresh").addEventListener("click", function () { tokens = {}; load(); });
+  var rt; window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(renderDaily, 120); });
+  load();
+})();
+</script>
+</body>
+</html>

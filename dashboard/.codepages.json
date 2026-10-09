@@ -1,0 +1,14 @@
+{
+  "my-hours-dashboard.html": {
+    "pageId": "42",
+    "deployedSha256": "670fae5d4b966eea51045fe81abdd22750a5066aacc0d41087269e7ee98859a9"
+  },
+  "my-hours-bootstrap.html": {
+    "pageId": "43",
+    "deployedSha256": "1a27ec77882d9b555d610f324a6badd1c4e243385af69c24fbbb91c73d160ed8"
+  },
+  "my-hours-echarts.html": {
+    "pageId": "44",
+    "deployedSha256": "c337be5e9b55689a87d2ae2c71a9ff2e0dfcc322ba6e94c5518ad9bd545d0222"
+  }
+}
