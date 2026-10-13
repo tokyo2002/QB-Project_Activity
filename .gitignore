@@ -7,3 +7,6 @@
 # macOS / editor clutter
 .DS_Store
 __pycache__/
+
+# Licensed theme (Inspinia, WrapBootstrap): reference only, copy in just the pieces a page uses
+dashboard/Wrapbootstrap/

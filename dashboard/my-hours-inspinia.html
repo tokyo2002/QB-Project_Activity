@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en" data-bs-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>My Hours</title>
+<!--
+  Project Activity - "My Hours" dashboard, Inspinia edition (PROTOTYPE, not deployed).
+  Restyle of page 43 (my-hours-bootstrap.html) on the Inspinia 5 theme. Same data and behavior:
+    Employees   (bhm98v33q)  fid 53 Current Week's Hours, fid 54 Last Week's Hours
+    Time Cards  (bhm9822gc)  report 6 "My Current Time Cards", report 24 "My Last Week's Time Cards"
+
+  Theme assets are loaded from the local, gitignored copy of the theme (ASSETS below), so this
+  file only renders on this machine. Before deploying, host app.min.css, vendors.min.css (icons),
+  the icon font and echarts.min.js as code pages and point ASSETS at them.
+  __QB_APP_TOKEN__ is substituted at deploy time. Open locally (or ?demo=1) for sample data.
+-->
+<script>
+  // Apply saved theme before paint: "light" | "dark"; absent = follow the system.
+  (function () {
+    var t = null;
+    try { t = localStorage.getItem("qbMyHoursInsp.theme"); } catch (e) {}
+    var dark = t === "dark" || (t !== "light" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-bs-theme", dark ? "dark" : "light");
+  })();
+</script>
+<link href="Wrapbootstrap/Inspinia-HTML/assets/css/vendors.min.css" rel="stylesheet">
+<link href="Wrapbootstrap/Inspinia-HTML/assets/css/app.min.css" rel="stylesheet">
+<script src="Wrapbootstrap/Inspinia-HTML/assets/plugins/echarts/echarts.min.js"></script>
+<style>
+  /* Chart roles. "This week" is the theme accent; "last week" is a recessive gray (emphasis pattern). */
+  :root, [data-bs-theme="light"] { --mh-this: #1ab394; --mh-last: #b6bec9; --mh-track: #edf0f4; }
+  [data-bs-theme="dark"]         { --mh-this: #1ab394; --mh-last: #4b4e5c; --mh-track: #2a2c36; }
+  body { background: var(--theme-tertiary-bg); display: block; }
+  .page { max-width: 1440px; margin: 0 auto; padding: 1.25rem 1.25rem 2rem; }
+  /* The theme paints a topbar-colored band behind the title; there is no topbar here. */
+  .page-title-head { margin: 0 !important; padding: 0 0 1.25rem !important; color: inherit; background: none !important; border: 0 !important; min-height: 0 !important; }
+  .page-title-head::before { display: none; }
+  .page-title-head .page-main-title { font-size: 1.05rem !important; letter-spacing: .04em; }
+  .num { font-variant-numeric: tabular-nums; }
+  .hero-num { font-size: 3rem; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+  .gauge-wrap { width: 132px; height: 132px; flex: none; }
+  .chart { width: 100%; }
+  .key { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+  .proj-row + .proj-row { margin-top: 1rem; }
+  .proj-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .progress-sm { height: 6px; }
+  .progress-bar.bar-this { background: var(--mh-this); }
+  .tc-table th.n, .tc-table td.n { text-align: center; }
+  .tc-table thead th { font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--theme-secondary-color); font-weight: 600; background: var(--theme-tertiary-bg); }
+  .tc-table thead th.today { color: var(--mh-this); }
+  .tc-table tfoot td { background: var(--theme-tertiary-bg); font-weight: 700; }
+  .h-cell { display: inline-block; min-width: 2.4rem; padding: .15rem .45rem; border-radius: .375rem; font-weight: 600; }
+  .h-1 { background: rgba(26,179,148,.12); } .h-2 { background: rgba(26,179,148,.24); } .h-3 { background: rgba(26,179,148,.40); }
+  tbody tr[data-rid] { cursor: pointer; user-select: none; }
+  .theme-btns .btn.active { background: rgba(26,179,148,.16); color: var(--mh-this); }
+  .skel { display: inline-block; min-width: 6rem; border-radius: 4px; background: var(--theme-light); color: transparent; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Page title -->
+  <div class="page-title-head d-flex flex-wrap align-items-center gap-3">
+    <div class="flex-grow-1">
+      <ol class="breadcrumb m-0 py-0 fs-xs">
+        <li class="breadcrumb-item">Project Activity</li>
+        <li class="breadcrumb-item active">My Hours</li>
+        <li class="ms-2"><span class="badge badge-soft-warning d-none" id="demoBadge">Sample data</span></li>
+      </ol>
+      <h4 class="page-main-title m-0 mt-1">My Hours</h4>
+    </div>
+    <div class="d-flex flex-wrap gap-2">
+      <a class="btn btn-sm btn-light" href="https://chartindustries.quickbase.com/nav/app/bg86uwfcw" target="_top" title="Go to the Project Activity app home"><i class="ti ti-home me-1"></i>App home</a>
+      <div class="btn-group btn-group-sm theme-btns" role="group" aria-label="Color theme">
+        <button type="button" class="btn btn-light" data-theme-choice="auto" title="Match system"><i class="ti ti-device-desktop"></i></button>
+        <button type="button" class="btn btn-light" data-theme-choice="light" title="Light"><i class="ti ti-sun"></i></button>
+        <button type="button" class="btn btn-light" data-theme-choice="dark" title="Dark"><i class="ti ti-moon"></i></button>
+      </div>
+      <button class="btn btn-sm btn-primary" id="refresh" type="button"><i class="ti ti-refresh me-1"></i>Refresh</button>
+    </div>
+  </div>
+
+  <div class="alert alert-info d-none gap-2 align-items-start" id="viewAsBanner" role="status">
+    <i class="ti ti-eye fs-lg"></i>
+    <div><strong>Test mode.</strong> Viewing as <strong id="viewAsName"></strong>: their hours and time cards, read with your permissions.
+      <a class="alert-link ms-1" id="viewAsExit" href="#" target="_top">Exit test mode</a></div>
+  </div>
+  <div class="alert alert-danger d-none" id="error" role="alert">
+    <i class="ti ti-alert-circle fs-lg"></i>
+    <div><strong id="errorTitle">Couldn't load your hours.</strong> <span id="errorMsg"></span></div>
+  </div>
+
+  <!-- Hero: one card, three panes split by dashed rules (Inspinia dashboard pattern) -->
+  <div class="card">
+    <div class="card-body p-0">
+      <div class="row g-0">
+        <div class="col-xxl-3 col-xl-6 order-xl-1 order-xxl-0">
+          <div class="p-4 border-end border-dashed h-100">
+            <h4 class="fs-lg mb-1" id="greeting"><span class="skel">Good morning</span></h4>
+            <div class="text-muted fs-xs" id="subline"><span class="skel">Week of</span></div>
+            <div class="d-flex align-items-center justify-content-between gap-3 mt-4">
+              <div>
+                <div class="text-muted text-uppercase fs-xxs fw-semibold">This week</div>
+                <div class="hero-num num my-1"><span id="curHours">&mdash;</span><span class="fs-lg text-muted fw-normal ms-1">hrs</span></div>
+                <div class="text-muted fs-xs" id="curRange"></div>
+              </div>
+              <div class="gauge-wrap" id="gauge" role="img" aria-label="Progress toward the weekly target"></div>
+            </div>
+            <div class="mt-3"><span class="badge badge-soft-primary fs-xs fw-medium" id="toGo"></span></div>
+          </div>
+          <hr class="d-xxl-none border-light m-0">
+        </div>
+
+        <div class="col-xxl-6 order-xl-3 order-xxl-1">
+          <div class="px-4 py-3 border-end border-dashed h-100">
+            <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+              <h4 class="card-title mb-0">Daily hours</h4>
+              <div class="fs-xs text-muted">
+                <span class="me-3"><span class="key" style="background:var(--mh-this)"></span>This week</span>
+                <span><span class="key" style="background:var(--mh-last)"></span>Last week</span>
+              </div>
+            </div>
+            <div class="row text-center g-2 mb-2">
+              <div class="col"><div class="bg-light bg-opacity-50 p-2 rounded"><h5 class="m-0 fs-sm"><span class="text-muted fw-normal">This week:</span> <span class="num" id="boxCur">&mdash;</span> hrs</h5></div></div>
+              <div class="col"><div class="bg-light bg-opacity-50 p-2 rounded"><h5 class="m-0 fs-sm"><span class="text-muted fw-normal">Last week:</span> <span class="num" id="boxLast">&mdash;</span> hrs</h5></div></div>
+            </div>
+            <div class="chart" id="dailyChart" style="height:260px" role="img" aria-label="Daily hours, this week compared with last week"></div>
+          </div>
+        </div>
+
+        <div class="col-xxl-3 col-xl-6 order-xl-2 order-xxl-2">
+          <div class="p-4 h-100">
+            <h4 class="card-title mb-1">Where this week went</h4>
+            <p class="text-muted fs-xs mb-4">Hours by project, this week</p>
+            <div id="projList"><span class="skel" style="height:120px;width:100%"></span></div>
+          </div>
+          <hr class="d-xxl-none border-light m-0">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI tiles -->
+  <div class="row row-cols-xl-4 row-cols-md-2 row-cols-1 g-3 mb-3">
+    <div class="col"><div class="card h-100 mb-0"><div class="card-body">
+      <h5 class="fs-sm text-muted fw-semibold mb-0">Last week</h5>
+      <div class="d-flex align-items-center gap-2 my-3">
+        <div class="avatar-md flex-shrink-0"><span class="avatar-title text-bg-light rounded-circle fs-22"><i class="ti ti-history"></i></span></div>
+        <h3 class="mb-0 num" id="lastHours">&mdash;</h3><span class="text-muted">hrs</span>
+      </div>
+      <p class="mb-0 fs-xs"><span class="text-muted">Week of</span><span class="float-end fw-semibold" id="lastRange"></span></p>
+    </div></div></div>
+    <div class="col"><div class="card h-100 mb-0"><div class="card-body">
+      <h5 class="fs-sm text-muted fw-semibold mb-0">Change vs last week</h5>
+      <div class="d-flex align-items-center gap-2 my-3">
+        <div class="avatar-md flex-shrink-0"><span class="avatar-title text-bg-light rounded-circle fs-22"><i class="ti ti-arrows-diff"></i></span></div>
+        <h3 class="mb-0 num" id="delta">&mdash;</h3>
+        <span class="badge fw-medium fs-xs ms-auto" id="deltaBadge"></span>
+      </div>
+      <p class="mb-0 fs-xs"><span class="text-muted">Time cards last week</span><span class="float-end fw-semibold num" id="lastCards">&mdash;</span></p>
+    </div></div></div>
+    <div class="col"><div class="card h-100 mb-0"><div class="card-body">
+      <h5 class="fs-sm text-muted fw-semibold mb-0">Daily average</h5>
+      <div class="d-flex align-items-center gap-2 my-3">
+        <div class="avatar-md flex-shrink-0"><span class="avatar-title text-bg-light rounded-circle fs-22"><i class="ti ti-calendar-stats"></i></span></div>
+        <h3 class="mb-0 num" id="avgDay">&mdash;</h3><span class="text-muted">hrs / day</span>
+      </div>
+      <p class="mb-0 fs-xs"><span class="text-muted">Days logged</span><span class="float-end fw-semibold num" id="daysLogged">&mdash;</span></p>
+    </div></div></div>
+    <div class="col"><div class="card h-100 mb-0"><div class="card-body">
+      <h5 class="fs-sm text-muted fw-semibold mb-0">Projects this week</h5>
+      <div class="d-flex align-items-center gap-2 my-3">
+        <div class="avatar-md flex-shrink-0"><span class="avatar-title text-bg-light rounded-circle fs-22"><i class="ti ti-briefcase"></i></span></div>
+        <h3 class="mb-0 num" id="projCount">&mdash;</h3>
+      </div>
+      <p class="mb-0 fs-xs"><span class="text-muted">Largest</span><span class="float-end fw-semibold text-truncate" style="max-width:65%" id="topProj">&mdash;</span></p>
+    </div></div></div>
+  </div>
+
+  <!-- Time cards -->
+  <div class="card">
+    <div class="card-header border-dashed card-tabs d-flex flex-wrap align-items-center gap-2">
+      <div class="flex-grow-1"><h4 class="card-title">Time cards</h4></div>
+      <ul class="nav nav-tabs card-header-tabs nav-bordered" role="tablist">
+        <li class="nav-item"><a href="#" class="nav-link active" data-tab="cur" role="tab">This week <span class="badge badge-soft-primary ms-1" id="cntCur">0</span></a></li>
+        <li class="nav-item"><a href="#" class="nav-link" data-tab="last" role="tab">Last week <span class="badge text-bg-light ms-1" id="cntLast">0</span></a></li>
+      </ul>
+      <a class="btn btn-sm btn-soft-primary ms-2" id="openReport" href="#" target="_blank" rel="noopener"><i class="ti ti-external-link me-1"></i>Open report</a>
+    </div>
+    <div class="card-body p-0">
+      <div class="table-responsive" id="tableWrap"><div class="p-4"><span class="skel" style="height:140px;width:100%"></span></div></div>
+    </div>
+    <div class="card-footer border-dashed fs-xs text-muted">Double-click a row (or press Enter) to edit that time card in a new tab.</div>
+  </div>
+
+  <div class="d-flex flex-wrap justify-content-between gap-2 fs-xs text-muted">
+    <span>Prototype on the Inspinia theme. Same data as My Hours.</span>
+    <span id="updated"></span>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  var CONFIG = {
+    realm: "chartindustries.quickbase.com",
+    appId: "bg86uwfcw",
+    appToken: "__QB_APP_TOKEN__",
+    employees: { table: "bhm98v33q", fid: { user: 8, name: 47, cur: 53, last: 54, title: 7, dept: 40, location: 35 } },
+    timeCards: { table: "bhm9822gc", reportCurrent: 6, reportLast: 24,
+                 fid: { rid: 3, project: 300, title: 137, total: 6, days: [23, 10, 11, 12, 13, 14, 24] } },
+    weeklyTarget: 40
+  };
+  var DAY_SHORT = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  var THEME_KEY = "qbMyHoursInsp.theme";
+  var isDemo = /[?&]demo=1/.test(location.search) || !/quickbase\.com$/i.test(location.hostname);
+  var reduceMotion = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var $ = function (id) { return document.getElementById(id); };
+
+  /* ---------------- "view as" test mode (app administrators only) ---------------- */
+  var VIEW_AS = (function () {
+    var m = /[?&]viewAs=([^&#]*)/i.exec(location.search);
+    var v = m ? decodeURIComponent(m[1].replace(/\+/g, " ")).trim() : "";
+    return /^[^\s'"{}<>]+@[^\s'"{}<>]+$/.test(v) ? v : "";
+  })();
+  var viewAsAsked = /[?&]viewAs=/i.test(location.search), viewAsDenied = false;
+  function userRef() { return VIEW_AS || "_curuser_"; }
+  function isAppAdmin() {
+    var url = "/db/" + CONFIG.appId + "?a=API_GetUserRole" +
+      (CONFIG.appToken.indexOf("__") !== 0 ? "&apptoken=" + encodeURIComponent(CONFIG.appToken) : "");
+    return fetch(url, { credentials: "include" }).then(function (r) { return r.text(); }).then(function (t) {
+      var x = new DOMParser().parseFromString(t, "text/xml"), err = x.querySelector("errcode");
+      if (!err || err.textContent !== "0") return false;
+      return [].some.call(x.querySelectorAll("role > access"), function (a) { return a.getAttribute("id") === "1"; });
+    }).catch(function () { return false; });
+  }
+  function checkViewAs() {
+    if (!viewAsAsked || isDemo) return Promise.resolve();
+    if (!VIEW_AS) { viewAsDenied = "invalid"; return Promise.resolve(); }
+    return isAppAdmin().then(function (ok) { if (!ok) { viewAsDenied = "admin"; VIEW_AS = ""; } });
+  }
+  function exitViewAsUrl() {
+    var q = location.search.replace(/([?&])viewAs=[^&#]*(&?)/i, function (m, a, b) { return b ? a : ""; });
+    return location.pathname + q + location.hash;
+  }
+  function viewAsNotice() {
+    if (viewAsDenied === "admin") return "\"View as\" is only available to app administrators, so this shows your own hours.";
+    if (viewAsDenied === "invalid") return "The viewAs value isn't a valid email address, so this shows your own hours.";
+    return "";
+  }
+
+  /* ---------- helpers ---------- */
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function num(v) { var n = Number(v); return isFinite(n) ? n : 0; }
+  function fmtH(h) { return (Math.round(num(h) * 100) / 100).toLocaleString(undefined, { maximumFractionDigits: 2 }); }
+  function startOfWeek(d) { var s = new Date(d.getFullYear(), d.getMonth(), d.getDate()); s.setDate(s.getDate() - s.getDay()); return s; }
+  function addDays(d, n) { var x = new Date(d); x.setDate(x.getDate() + n); return x; }
+  function fmtDate(d) { return d.toLocaleDateString(undefined, { month: "short", day: "numeric" }); }
+  function weekRange(s) { var e = addDays(s, 6); return fmtDate(s) + " \u2013 " + (s.getMonth() === e.getMonth() ? e.getDate() : fmtDate(e)) + ", " + e.getFullYear(); }
+  function greet(d) { var h = d.getHours(); return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening"; }
+  function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+  function countUp(el, to) {
+    if (reduceMotion) { el.textContent = fmtH(to); return; }
+    var t0 = null, dur = 700;
+    (function step(t) { if (!t0) t0 = t; var p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+      el.textContent = fmtH(to * e); if (p < 1) requestAnimationFrame(step); })(performance.now());
+  }
+
+  var now = new Date(), wkCur = startOfWeek(now), wkLast = addDays(wkCur, -7);
+
+  /* ---------- Quickbase API ---------- */
+  var tokens = {};
+  function check(r) {
+    if (r.ok) return r.json();
+    return r.text().then(function (t) {
+      var msg = t; try { var j = JSON.parse(t); msg = (j.message || "") + (j.description ? " \u2014 " + j.description : ""); } catch (e) {}
+      throw new Error("Quickbase API " + r.status + ": " + msg);
+    });
+  }
+  function tempToken(dbid) {
+    if (tokens[dbid]) return Promise.resolve(tokens[dbid]);
+    var h = { "QB-Realm-Hostname": CONFIG.realm };
+    if (CONFIG.appToken.indexOf("__") !== 0) h["QB-App-Token"] = CONFIG.appToken;
+    return fetch("https://api.quickbase.com/v1/auth/temporary/" + dbid, { credentials: "include", headers: h })
+      .then(check).then(function (j) { return (tokens[dbid] = j.temporaryAuthorization); });
+  }
+  function api(dbid, method, path, body) {
+    return tempToken(dbid).then(function (tok) {
+      return fetch("https://api.quickbase.com/v1" + path, {
+        method: method, body: body ? JSON.stringify(body) : undefined,
+        headers: { "QB-Realm-Hostname": CONFIG.realm, "Authorization": "QB-TEMP-TOKEN " + tok, "Content-Type": "application/json" }
+      }).then(check);
+    });
+  }
+  // Report's own filter/columns/sort, run as a query with Record ID# added.
+  function runReport(reportId) {
+    var t = CONFIG.timeCards.table, rid = CONFIG.timeCards.fid.rid;
+    return api(t, "GET", "/reports/" + reportId + "?tableId=" + t).then(function (rep) {
+      var q = rep.query || {};
+      var body = { from: t, select: [rid].concat((q.fields || []).filter(function (id) { return id !== rid; })), where: (q.filter || "").split("_curuser_").join(userRef()), options: { skip: 0, top: 1000 } };
+      if (q.sortBy && q.sortBy.length) body.sortBy = q.sortBy;
+      return api(t, "POST", "/records/query", body);
+    });
+  }
+  function myEmployee() {
+    var e = CONFIG.employees, f = e.fid;
+    return api(e.table, "POST", "/records/query", { from: e.table, select: [f.name, f.cur, f.last, f.title, f.dept, f.location], where: "{" + f.user + ".TV.'" + userRef() + "'}" });
+  }
+  function editUrl(rid) { return "https://" + CONFIG.realm + "/db/" + CONFIG.timeCards.table + "?a=er&rid=" + encodeURIComponent(rid); }
+
+  /* ---------- data shaping ---------- */
+  function rows(rep) {
+    var f = CONFIG.timeCards.fid;
+    return (rep.data || []).map(function (r) {
+      var g = function (id) { return r[id] ? r[id].value : null; };
+      var days = f.days.map(function (id) { return num(g(id)); });
+      var total = g(f.total);
+      return { rid: g(f.rid), project: g(f.project) || "", title: g(f.title) || "", days: days,
+               total: total == null ? days.reduce(function (a, b) { return a + b; }, 0) : num(total) };
+    });
+  }
+  function sumDays(rs) { var d = [0, 0, 0, 0, 0, 0, 0]; rs.forEach(function (r) { r.days.forEach(function (h, i) { d[i] += h; }); }); return d; }
+  function sumTotal(rs) { return rs.reduce(function (a, r) { return a + r.total; }, 0); }
+  function byProject(rs) {
+    var m = {};
+    rs.forEach(function (r) { var k = r.project || r.title || "Unassigned"; m[k] = (m[k] || 0) + r.total; });
+    var list = Object.keys(m).map(function (k) { return { name: k, value: Math.round(m[k] * 100) / 100 }; })
+      .filter(function (x) { return x.value > 0; }).sort(function (a, b) { return b.value - a.value; });
+    if (list.length > 6) {
+      var rest = list.slice(5).reduce(function (a, x) { return a + x.value; }, 0);
+      list = list.slice(0, 5).concat([{ name: "Other (" + (list.length - 5) + ")", value: rest }]);
+    }
+    return list;
+  }
+
+  /* ---------- charts ---------- */
+  var charts = {}, state = null;
+  function colors() {
+    return { thisWk: cssVar("--mh-this"), lastWk: cssVar("--mh-last"), track: cssVar("--mh-track"),
+             text: cssVar("--theme-body-color"), sub: cssVar("--theme-secondary-color"),
+             grid: cssVar("--theme-border-color"), surface: cssVar("--theme-secondary-bg") };
+  }
+  function chart(id) {
+    if (charts[id]) charts[id].dispose();
+    charts[id] = echarts.init($(id), null, { renderer: "svg" });
+    return charts[id];
+  }
+  // Daily hours scale: always at least an 8-hour day, growing only when a day goes past 8.
+  function hoursAxis(v) {
+    var steps = [8, 10, 12, 16, 20, 24], max = Math.ceil(v / 4) * 4;
+    for (var i = 0; i < steps.length; i++) if (v <= steps[i]) { max = steps[i]; break; }
+    return { min: 0, max: max, interval: max <= 12 ? 2 : 4 };
+  }
+  function drawCharts() {
+    if (!state || !window.echarts) return;
+    var c = colors(), cur = state.dailyCur, last = state.dailyLast, today = now.getDay();
+    var labels = DAY_SHORT.map(function (d, i) { return d + "\n" + (i === today ? "Today" : fmtDate(addDays(wkCur, i))); });
+    var ax = hoursAxis(Math.max.apply(null, cur.concat(last)));
+    var tip = { backgroundColor: c.surface, borderColor: c.grid, textStyle: { color: c.text } };
+
+    chart("dailyChart").setOption({
+      textStyle: { fontFamily: "inherit" },
+      grid: { left: 4, right: 4, top: 22, bottom: 0, containLabel: true },
+      tooltip: Object.assign({ trigger: "axis", axisPointer: { type: "shadow", shadowStyle: { color: "rgba(127,127,127,.08)" } },
+                 valueFormatter: function (v) { return fmtH(v) + " hrs"; } }, tip),
+      xAxis: { type: "category", data: labels, axisTick: { show: false }, axisLine: { lineStyle: { color: c.grid } },
+               axisLabel: { color: c.sub, lineHeight: 15, fontSize: 11 } },
+      yAxis: { type: "value", min: ax.min, max: ax.max, interval: ax.interval, splitLine: { lineStyle: { color: c.grid } }, axisLabel: { color: c.sub, fontSize: 11 } },
+      series: [
+        { name: "Last week", type: "bar", data: last, barMaxWidth: 18, barGap: "20%", itemStyle: { color: c.lastWk, borderRadius: [4, 4, 0, 0] } },
+        { name: "This week", type: "bar", data: cur, barMaxWidth: 18, itemStyle: { color: c.thisWk, borderRadius: [4, 4, 0, 0] },
+          label: { show: true, position: "top", color: c.sub, fontSize: 11, fontWeight: 600, formatter: function (x) { return x.value > 0 ? fmtH(x.value) : ""; } } }
+      ]
+    });
+
+    var target = CONFIG.weeklyTarget, val = state.cur;
+    chart("gauge").setOption({
+      series: [{
+        type: "gauge", startAngle: 90, endAngle: -270, min: 0, max: target, radius: "94%",
+        pointer: { show: false }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false },
+        progress: { show: true, roundCap: true, width: 11, itemStyle: { color: c.thisWk } },
+        axisLine: { lineStyle: { width: 11, color: [[1, c.track]] } },
+        title: { show: true, offsetCenter: [0, "26%"], color: c.sub, fontSize: 11 },
+        detail: { offsetCenter: [0, "-8%"], color: c.text, fontSize: 22, fontWeight: 700,
+                  formatter: function () { return Math.round(target ? val / target * 100 : 0) + "%"; } },
+        data: [{ value: Math.min(val, target), name: "of " + target + " hrs" }]
+      }]
+    });
+  }
+  var rt; window.addEventListener("resize", function () { clearTimeout(rt); rt = setTimeout(function () { Object.keys(charts).forEach(function (k) { charts[k].resize(); }); }, 100); });
+
+  /* ---------- render ---------- */
+  function renderProjects(list, total) {
+    if (!list.length) { $("projList").innerHTML = '<p class="text-muted fs-sm mb-0">No hours logged yet this week.</p>'; return; }
+    var max = list[0].value;
+    $("projList").innerHTML = list.map(function (x) {
+      var share = total ? Math.round(x.value / total * 100) : 0;
+      return '<div class="proj-row" title="' + esc(x.name) + ": " + fmtH(x.value) + " hrs (" + share + '% of the week)">' +
+        '<div class="d-flex align-items-baseline gap-2 mb-1"><span class="proj-name fw-semibold fs-sm flex-grow-1">' + esc(x.name) + '</span>' +
+        '<span class="num fw-semibold fs-sm">' + fmtH(x.value) + '</span><span class="num text-muted fs-xs" style="width:2.6rem;text-align:right">' + share + '%</span></div>' +
+        '<div class="progress progress-sm"><div class="progress-bar bar-this" style="width:' + (max ? x.value / max * 100 : 0) + '%"></div></div></div>';
+    }).join("");
+  }
+
+  var tables = { cur: [], last: [] }, activeTab = "cur";
+  function renderTable() {
+    var rs = tables[activeTab], start = activeTab === "cur" ? wkCur : wkLast;
+    $("openReport").href = "https://" + CONFIG.realm + "/db/" + CONFIG.timeCards.table + "?a=q&qid=" + (activeTab === "cur" ? CONFIG.timeCards.reportCurrent : CONFIG.timeCards.reportLast);
+    if (!rs.length) { $("tableWrap").innerHTML = '<p class="text-center text-muted py-5 mb-0">No time cards ' + (activeTab === "cur" ? "this week yet." : "for last week.") + "</p>"; return; }
+    var today = activeTab === "cur" ? now.getDay() : -1;
+    var h = '<table class="table table-custom table-centered table-hover table-nowrap tc-table mb-0" style="min-width:880px"><thead><tr><th class="ps-4">Project / time card</th>';
+    for (var i = 0; i < 7; i++) h += '<th class="n' + (i === today ? " today" : "") + '">' + DAY_SHORT[i] + '<div class="fw-normal text-lowercase" style="letter-spacing:0">' + esc(fmtDate(addDays(start, i))) + "</div></th>";
+    h += '<th class="text-end pe-4">Total</th></tr></thead><tbody>';
+    rs.forEach(function (r) {
+      var title = r.title || r.project || "(untitled)", proj = r.project && r.project !== title ? r.project : "";
+      h += "<tr" + (r.rid ? ' data-rid="' + esc(r.rid) + '" tabindex="0" title="Double-click to edit this time card"' : "") + '><td class="ps-4">' +
+           '<h5 class="fs-base my-1">' + esc(title) + "</h5>" + (proj ? '<span class="text-muted fs-xs">' + esc(proj) + "</span>" : "") + "</td>";
+      r.days.forEach(function (v) { h += '<td class="n num">' + (v > 0 ? '<span class="h-cell h-' + (v >= 8 ? 3 : v >= 4 ? 2 : 1) + '">' + fmtH(v) + "</span>" : '<span class="text-muted">\u2013</span>') + "</td>"; });
+      h += '<td class="text-end pe-4 fw-bold num">' + fmtH(r.total) + "</td></tr>";
+    });
+    var d = sumDays(rs);
+    h += '</tbody><tfoot><tr><td class="ps-4">Total</td>' + d.map(function (v) { return '<td class="n num">' + (v ? fmtH(v) : "\u2013") + "</td>"; }).join("") +
+         '<td class="text-end pe-4 num">' + fmtH(sumTotal(rs)) + "</td></tr></tfoot></table>";
+    $("tableWrap").innerHTML = h;
+  }
+  document.querySelectorAll("[data-tab]").forEach(function (b) {
+    b.addEventListener("click", function (e) {
+      e.preventDefault();
+      activeTab = b.getAttribute("data-tab");
+      document.querySelectorAll("[data-tab]").forEach(function (x) { x.classList.toggle("active", x === b); });
+      renderTable();
+    });
+  });
+  function openRow(e) {
+    var tr = e.target.closest && e.target.closest("tr[data-rid]");
+    if (tr && (e.type === "dblclick" || e.key === "Enter")) window.open(editUrl(tr.getAttribute("data-rid")), "_blank", "noopener");
+  }
+  $("tableWrap").addEventListener("dblclick", openRow);
+  $("tableWrap").addEventListener("keydown", openRow);
+
+  function render(d) {
+    var curRows = rows(d.cur), lastRows = rows(d.last);
+    var cur = d.emp.cur != null ? num(d.emp.cur) : sumTotal(curRows);
+    var last = d.emp.last != null ? num(d.emp.last) : sumTotal(lastRows);
+    var first = (d.emp.name || "").split(" ")[0];
+    $("greeting").textContent = greet(now) + (first ? ", " + first : "");
+    $("subline").textContent = [d.emp.title, d.emp.dept, d.emp.location].filter(Boolean).join("  \u00b7  ") || "Project Activity";
+    countUp($("curHours"), cur);
+    $("curRange").textContent = weekRange(wkCur);
+    var left = Math.max(0, CONFIG.weeklyTarget - cur);
+    $("toGo").innerHTML = left > 0 ? fmtH(left) + " hrs to " + CONFIG.weeklyTarget : '<i class="ti ti-check me-1"></i>' + CONFIG.weeklyTarget + "-hour week reached";
+    $("boxCur").textContent = fmtH(cur); $("boxLast").textContent = fmtH(last);
+
+    countUp($("lastHours"), last);
+    $("lastRange").textContent = weekRange(wkLast);
+    var delta = Math.round((cur - last) * 100) / 100;
+    $("delta").textContent = (delta > 0 ? "+" : "") + fmtH(delta);
+    var pct = last ? Math.round(delta / last * 100) : 0;
+    $("deltaBadge").className = "badge fw-medium fs-xs ms-auto " + (delta > 0 ? "badge-soft-success" : delta < 0 ? "badge-soft-danger" : "text-bg-light");
+    $("deltaBadge").innerHTML = '<i class="ti ' + (delta > 0 ? "ti-trending-up" : delta < 0 ? "ti-trending-down" : "ti-minus") + ' me-1"></i>' + (delta > 0 ? "+" : "") + pct + "%";
+    $("lastCards").textContent = lastRows.length;
+
+    var daily = sumDays(curRows), logged = daily.filter(function (h) { return h > 0; }).length;
+    $("avgDay").textContent = logged ? fmtH(sumTotal(curRows) / logged) : "0";
+    $("daysLogged").textContent = logged + " of 7";
+    var projects = byProject(curRows);
+    $("projCount").textContent = projects.length;
+    $("topProj").textContent = projects.length ? projects[0].name : "\u2013";
+    $("topProj").title = projects.length ? projects[0].name : "";
+    renderProjects(projects, sumTotal(curRows));
+
+    state = { cur: cur, dailyCur: daily, dailyLast: sumDays(lastRows) };
+    drawCharts();
+
+    tables.cur = curRows; tables.last = lastRows;
+    $("cntCur").textContent = curRows.length; $("cntLast").textContent = lastRows.length;
+    renderTable();
+    $("updated").textContent = "Updated " + new Date().toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+    if (d.emp.missing) showError("No Employees record is linked to " + (VIEW_AS || "your Quickbase user") + ", so the totals come from the time card reports instead.", "Heads up.", "warning");
+    if (viewAsNotice()) showError(viewAsNotice(), "Heads up.", "warning");
+    if (VIEW_AS) {
+      $("viewAsName").textContent = d.emp.name ? d.emp.name + " (" + VIEW_AS + ")" : VIEW_AS;
+      $("viewAsExit").href = exitViewAsUrl();
+      $("viewAsBanner").classList.remove("d-none"); $("viewAsBanner").classList.add("d-flex");
+    }
+  }
+  function showError(msg, title, kind) {
+    $("error").className = "alert alert-" + (kind || "danger") + " d-flex gap-2 align-items-start";
+    $("errorTitle").textContent = title || "Couldn't load your hours.";
+    $("errorMsg").textContent = msg;
+  }
+
+  /* ---------- load ---------- */
+  function demo() {
+    var f = CONFIG.timeCards.fid, rid = 900000, today = now.getDay();
+    function rec(p, t, days) { var o = {}; o[f.rid] = { value: ++rid }; o[f.project] = { value: p }; o[f.title] = { value: t };
+      f.days.forEach(function (id, i) { o[id] = { value: days[i] }; }); o[f.total] = { value: days.reduce(function (a, b) { return a + b; }, 0) }; return o; }
+    var upTo = function (a) { return a.map(function (v, i) { return i <= today ? v : 0; }); };
+    var cur = { data: [
+      rec("LNG Vaporizer Skid \u2013 Sabine Pass", "Detail drawings rev C", upTo([0, 4, 3.5, 5, 2, 3, 0])),
+      rec("NPD \u2013 Bulk Tank Gen 3", "FEA review & design changes", upTo([0, 2.5, 3, 1, 4.5, 2, 0])),
+      rec("ECR 21844 \u2013 Valve manifold", "Update BOM and PDM release", upTo([0, 1, 1.5, 0, 1.5, 2.5, 0])),
+      rec("Administrative", "Team meeting / training", upTo([0, 0.5, 0, 1, 0.5, 0.5, 0])) ] };
+    var last = { data: [
+      rec("LNG Vaporizer Skid \u2013 Sabine Pass", "Detail drawings rev B", [0, 5, 4, 3, 4, 3, 0]),
+      rec("NPD \u2013 Bulk Tank Gen 3", "Concept layout", [0, 2, 3, 3.5, 2, 2, 0]),
+      rec("Customer CSR 1187", "Field issue support", [0, 0, 1, 1.5, 1, 1.5, 0]),
+      rec("Administrative", "Team meeting", [0, 1, 0, 0.5, 0.5, 0.5, 0]) ] };
+    var sum = function (r) { return r.data.reduce(function (a, x) { return a + x[f.total].value; }, 0); };
+    return Promise.resolve({ emp: { name: "Kris Tenney", title: "Design Engineer", dept: "Engineering", location: "Prague, OK", cur: sum(cur), last: sum(last) }, cur: cur, last: last });
+  }
+  function live() {
+    var f = CONFIG.employees.fid;
+    return checkViewAs().then(function () {
+      return Promise.all([myEmployee(), runReport(CONFIG.timeCards.reportCurrent), runReport(CONFIG.timeCards.reportLast)]);
+    }).then(function (res) {
+      var e = (res[0].data || [])[0] || {}, g = function (id) { return e[id] ? e[id].value : null; };
+      return { emp: { name: g(f.name), title: g(f.title), dept: g(f.dept), location: g(f.location), cur: g(f.cur), last: g(f.last), missing: !(res[0].data || []).length },
+               cur: res[1], last: res[2] };
+    });
+  }
+  function load() {
+    $("error").className = "alert d-none";
+    if (!window.echarts) showError("The chart library didn't load, so the charts are hidden.");
+    (isDemo ? demo() : live()).then(render).catch(function (err) { showError(err && err.message ? err.message : String(err)); });
+  }
+  if (isDemo) $("demoBadge").classList.remove("d-none");
+
+  /* ---------- theme toggle (remembered in this browser) ---------- */
+  function savedTheme() { try { var t = localStorage.getItem(THEME_KEY); return t === "light" || t === "dark" ? t : "auto"; } catch (e) { return "auto"; } }
+  function applyTheme(choice) {
+    var dark = choice === "dark" || (choice === "auto" && window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-bs-theme", dark ? "dark" : "light");
+    document.querySelectorAll("[data-theme-choice]").forEach(function (b) {
+      var on = b.getAttribute("data-theme-choice") === choice;
+      b.classList.toggle("active", on); b.setAttribute("aria-pressed", String(on));
+    });
+    drawCharts(); // ECharts doesn't read CSS variables, so redraw with the new colors
+  }
+  document.querySelectorAll("[data-theme-choice]").forEach(function (b) {
+    b.addEventListener("click", function () {
+      var c = b.getAttribute("data-theme-choice");
+      try { if (c === "auto") localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, c); } catch (e) {}
+      applyTheme(c);
+    });
+  });
+  if (window.matchMedia) matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () { if (savedTheme() === "auto") applyTheme("auto"); });
+  applyTheme(savedTheme());
+
+  $("refresh").addEventListener("click", function () { tokens = {}; load(); });
+  load();
+})();
+</script>
+</body>
+</html>

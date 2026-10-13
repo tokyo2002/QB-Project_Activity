@@ -60,6 +60,15 @@ Commit after every deploy. `.codepages.json` records each page's ID and a finger
 - **Theme choice is saved per browser**, separately for each page, rather than in a Quickbase field, so no table changes were needed.
 - **"View as" is admin-only.** The page checks `API_GetUserRole` for Administrator (access id 1) before using it.
 
+## Prototypes (local only, not deployed)
+
+Both use the Inspinia 5 theme (WrapBootstrap). The theme lives in `Wrapbootstrap/`, which is gitignored and used as reference only. The prototypes load its CSS, icon font and ECharts from that folder, so they only render on this machine. To deploy one, host the theme's `app.min.css` and `vendors.min.css` (icons), the icon font and `echarts.min.js` as code pages, and point the page at them. Also add the page to the deploy script.
+
+| File | What it is |
+|---|---|
+| `my-hours-inspinia.html` | Page 43 restyled on Inspinia. Same data and behavior. |
+| `accounting-period.html` | Hours by accounting period (26th to 25th), split by BU and project, with a Final/Provisional status and CSV export. Uses sample data until the Time Card Days table exists (`pipelines/TimeCardDays_Report_v2.md`). |
+
 ## Known issues
 
 - **The Projects count differs between pages.** Pages 42 and 44 count a project whose time card has 0 hours; page 43 doesn't. The plan is to make 42 and 44 match 43.
@@ -81,4 +90,5 @@ Commit after every deploy. `.codepages.json` records each page's ID and a finger
 
 - **2026-10-08:** Explored the app and tables (read only). The Current Week Hours formula was rejected for performance, so the user added summary fields 53 and 54. Page 42 deployed, then iterated on: encoding fix, button changes, card order, double-click to edit, theme toggle.
 - **2026-10-08:** Page 43 (Bootstrap + ECharts) and page 44 (custom CSS + ECharts) added. App home button on all pages.
+- **2026-10-09:** Added Inspinia prototypes (`my-hours-inspinia.html`, `accounting-period.html`), local only.
 - **2026-10-09:** Admin-only `viewAs` test mode on all pages. At-least-8-hour daily scale on all pages. Git repository and deploy drift check set up (initial commit `993cc2f`).
