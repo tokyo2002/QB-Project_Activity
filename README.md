@@ -17,6 +17,7 @@ Each workstream has its own folder and a notes file that tracks its status, deci
 | Workstream | Folder | Notes |
 |---|---|---|
 | My Hours dashboard (code pages 42, 43, 44) | [`dashboard/`](dashboard/) | [`dashboard/dashboard.md`](dashboard/dashboard.md) |
+| Pipelines: Time Card Days for accounting-period hours | [`pipelines/`](pipelines/) | [`pipelines/pipelines.md`](pipelines/pipelines.md) |
 
 To add a workstream, give it a folder with its own `<name>.md` notes file, add a row here, and put any scripts it needs in `scripts/`.
 
@@ -40,6 +41,7 @@ op run --env-file=.qb.env -- python3 scripts/<script>.py
 ```
 .qb.env.example      template for the local, gitignored .qb.env
 dashboard/           My Hours dashboard code pages (see dashboard/dashboard.md)
+pipelines/           Pipeline build sheets and exported YAML (see pipelines/pipelines.md)
 scripts/             tools that talk to Quickbase (each has usage notes in its header)
 ```
 
