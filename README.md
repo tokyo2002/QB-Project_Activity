@@ -8,6 +8,8 @@ Working repo for customizations to Chart's **Project Activity** Quickbase app. T
 | App | Project Activity, `bg86uwfcw` |
 | Key tables | Employees `bhm98v33q`, Time Cards `bhm9822gc` (~550k records), Projects `bpaz4pr6u`, Tasks `biwfb28d9` |
 
+For all 50 tables, grouped by sub-process, see [`app-map.md`](app-map.md).
+
 This is the **production** app. Read-only exploration through the API is fine. Any change to tables, fields, reports or roles should be agreed first and done deliberately, either by hand in Quickbase or by a reviewed script.
 
 ## Workstreams
