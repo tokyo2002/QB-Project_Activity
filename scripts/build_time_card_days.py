@@ -89,7 +89,8 @@ FORMULA_FIELDS = [
     ("Key Mismatch", "checkbox", "[Day Key] <> [Related Time Card] * 10 + [Day Index]"),
     ("Provisional", "checkbox", "not [TC - Timecard Locked]"),
     # Quickbase has no cascade delete: true means the card is gone and Pipeline B has yet to sweep this record.
-    ("Orphan", "checkbox", "IsNull([TC - Record ID#])"),
+    # Test the lookup for 0, not IsNull: a numeric lookup with no parent reads as 0 (blank counts as zero).
+    ("Orphan", "checkbox", "[TC - Record ID#] = 0"),
 ]
 
 # Step 7: on Time Cards, after the summaries exist.
