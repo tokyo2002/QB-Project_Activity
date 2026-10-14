@@ -338,7 +338,7 @@ All on Time Card Days. Every report filters **Hours > 0** and **Orphan = false**
 | R5 | Accounting – Last Period by Legacy BU | Summary | Same as R1 | Rows: Legacy BU → Project Name | Temporary, until O1 is decided |
 | R6 | Admin – Sync problems | Table on **Time Cards** | Day Records Out of Sync = true | Record ID#, Employee, Week Beginning, Total Hours, Day Records - Hours, Day Records - Count | Admin |
 | R7 | Admin – Date drift / key mismatch | Table | Date Drift = true OR Key Mismatch = true | Day Key, Related Time Card, Day Index, Work Date, TC - Week Beginning | Admin |
-| R8 | Admin – Orphans | Table | Orphan = true | Day Key, Related Time Card, Work Date, Hours, Snapshot Written | Admin. Should be empty the morning after Pipeline B runs. Pipeline B can also use it as its query |
+| R8 | **Orphaned Records** (report ID 5, built 2026-10-14) | Table | Orphan = true | As built: Day Key, Day Index, Work Date, Hours, Employee, Orphan; sort Day Key desc. Suggested: add Related Time Card, which keeps the deleted card's ID | Admin. Should be empty the morning after Pipeline B runs. Pipeline B can also use it as its query |
 
 R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Project is not blank`, which matches report 207's scope (O5).
 
@@ -424,7 +424,7 @@ Three Pipelines write to or delete from Time Card Days (`bwe8cjimn`). All three 
 
 | Pipeline | Trigger | What it does | Status |
 |---|---|---|---|
-| **B. Orphan sweep** (new) | Nightly schedule | Deletes day records whose card no longer exists | To build |
+| **B. Orphan sweep** (new) | Nightly schedule | Deletes day records whose card no longer exists | **Built and tested 2026-10-14** (V13). Export YAML to `pipelines/` |
 | **Delete Record** (existing) | Delete Record (TC fid 268) checked | **New step:** deletes the card's day records before deleting the card | To change |
 | **A. Sync on change** (new) | Time Card created or updated | Writes the card's 7 day records | To build |
 
