@@ -31,6 +31,7 @@ Build sheet, **v2** · 2026-10-09 · App: Project Activity (`bg86uwfcw`) · Prod
 
 | Version | Date | Change |
 |---|---|---|
+| v2 (amended) | 2026-10-14 | Rewrote [15](#15-pipelines) as a step-by-step build plan with the real field IDs: build order B → Delete Record step → A, Pipeline B as Search + loop delete, Pipeline A's two guards merged into one condition (step c), a full 7-row mapping table, and the tests for each Pipeline. |
 | v2 (amended) | 2026-10-14 | **Quickbase has no cascade delete.** Earlier versions relied on a relationship setting that doesn't exist. Day records are now removed by a step added to the Delete Record (fid 268) Pipeline, plus **Pipeline B**, a nightly orphan sweep. Added the lookup 4c TC - Record ID# and the formula Orphan. Reports filter `Orphan = false`. Rewrote critical note #7, relationship 3a, build order steps 4 and 9–10, and check V4. Added V13. |
 | v2 (amended) | 2026-10-14 | Added [17](#17-time-cards-field-audit-and-cleanup), a field audit of Time Cards with a proposed cleanup. Updated O3 and O4 with what the audit found. No change to the design. |
 | v2 | 2026-10-09 | Pipeline A handles quick repeated saves: (1) step b re-reads the card's **current** values instead of using the trigger's copy, so a run that finishes late can't overwrite newer hours with older ones; (2) step c stops if the card has been deleted, so a late run can't recreate orphan day records after the cascade delete. Field mapping moves from `a.` to `b.`. Added critical note #9 and checks V11–V12. |
@@ -369,7 +370,7 @@ Steps 1–7 were done on 2026-10-14 by `scripts/build_time_card_days.py`. Step 8
 | O1 | **Open** | **Which BU does accounting mean?** Report 207 points to the new BU (Task → Business Unit). That only appears from about 2026-08-09 and is sparse before the week of 2026-10-04. Both are snapshotted, so the answer changes only which reports are kept (R1 vs R5). It doesn't change the table. If the answer is "new BU", ask accounting how to treat `(no BU)` hours in the 2026-09 period. |
 | O2 | **Open** | Confirm with accounting that the period is named by the month it ends in (`2026-09` = Aug 26 – Sep 25). Changing the name later is a formula edit and needs no data rework. |
 | O3 | **Open** | The Time Cards fields Department / Location / Discipline / Project / Business Unit (at entry), fids 286–290, have **never held a value** (audit, 2026-10-14). That effort is dead, and this design keeps its own snapshot on Time Card Days. **Each field is still referenced by one Pipeline and one form.** Find that Pipeline before deleting them. See [17](#17-time-cards-field-audit-and-cleanup), group C. |
-| O4 | **Closed** 2026-10-14 | **Delete Record (TC fid 268).** This is part of the delete trigger (confirmed 2026-10-14): checking it starts the Pipeline and webhook that hard-delete the card. A step added to that Pipeline removes the card's day records first (critical note #7), so Time Card Days doesn't need to snapshot or filter on it. **Keep the field.** |
+| O4 | **Closed** 2026-10-14 | **Delete Record (TC fid 268).** This is part of the delete trigger (confirmed 2026-10-14): checking it starts the Delete Record Pipeline, which hard-deletes the card. A step added to that Pipeline removes the card's day records first (critical note #7), so Time Card Days doesn't need to snapshot or filter on it. **Keep the field.** |
 | O5 | **Open** | Should accounting reports be all BUs, or Hyderabad-only like report 207? |
 | O6 | **Open** | Pipelines usage: Pipeline A fires on every hours edit, about 760 cards per week × several edits. Check the account's Pipelines step/run allowance. |
 | O7 | **Deferred** | **Accounting access.** There is no Accounting role. Until it's decided, only admins can see Time Card Days and run R1–R5. Options: a new Accounting role with View (recommended), View for an existing role, or admins export the reports. Decide before step 12 (reports) goes to accounting. |
@@ -418,62 +419,110 @@ Roles as of 2026-10-14, from `API_GetRoleInfo`. A role added later needs the sam
 
 ## 15. Pipelines
 
-Store each Pipeline's exported YAML in this folder after building it: `pipelines/<name>.yaml`.
+Three Pipelines write to or delete from Time Card Days (`bwe8cjimn`). All three run as an **admin user** (section 13), so they need no role changes. Export each one's YAML into this folder after building it: `pipelines/<name>.yaml`.
 
-### Pipeline A — "Time Card Days: sync on change"
+| Pipeline | Trigger | What it does | Status |
+|---|---|---|---|
+| **B. Orphan sweep** (new) | Nightly schedule | Deletes day records whose card no longer exists | To build |
+| **Delete Record** (existing) | Delete Record (TC fid 268) checked | **New step:** deletes the card's day records before deleting the card | To change |
+| **A. Sync on change** (new) | Time Card created or updated | Writes the card's 7 day records | To build |
 
-| Step | Type | Configuration |
-|---|---|---|
-| **a. Trigger** | Quickbase → Record created / updated, table Time Cards | **Fields to watch** (no-op guard): Date (9), Sunday (23), Monday (10), Tuesday (11), Wednesday (12), Thursday (13), Friday (14), Saturday (24), Related Task (57), Related Employee (15). Formula fields aren't used here; see [4](#4-critical-implementation-notes) #1 |
-| **b. Re-read card** (stale-data guard) | Quickbase → Look Up a Record, table Time Cards | Record ID# = `{{ a.id }}`. If not found: **don't fail**, continue to c with nothing found. Every later step reads from **b**, never **a**: the trigger's copy is the card as it was at *that* save, while b is the card as it is *now*. See [4](#4-critical-implementation-notes) #9 |
-| **c. Condition** (deleted-card guard) | If | b found no record → **end**. The card was deleted after this run started. Its day records were removed by the delete Pipelines (critical note #7), and continuing would recreate them as orphans. If one slips through, Pipeline B sweeps it |
-| **d. Condition** (boundary guard) | If | `{{ b.week_ending }}` **≥ 2026-08-26**. Otherwise end. Update this together with D2 |
-| **e. Prepare** | Quickbase → Prepare Bulk Record Upsert | Table: Time Card Days. **Merge field: Day Key** |
-| **f.–l. Add rows ×7** | Quickbase → Add a Bulk Upsert Row | One per Day Index 0–6. Field mapping below |
-| **m. Commit** | Quickbase → Commit Upserts | |
+Build them in that order (B, Delete Record, A). B and the delete step only remove records, so they're safe to switch on first. A is switched on last, after its tests pass.
 
-**Row mapping** (shown for Day Index 0, Sunday; change the day fields for the other six):
+**Field IDs used below.** Time Card Days: 6 Day Key, 7 Day Index, 8 Work Date, 9 Hours, 10 Employee, 11 BU Code, 12 BU Name, 13 BU Full Name, 14 Legacy BU, 15 Project Name, 16 Project Type, 17 Time Card Title, 18 Time Card Type, 19 Hyderabad Project, 20 Billable?, 21 Snapshot Written, 22 Related Time Card, 37 Orphan. Time Cards: see the row mapping.
 
-| Time Card Days field | Value |
-|---|---|
-| Day Key | `{{ (b.id | int) * 10 + 0 }}` (Mon `+ 1` … Sat `+ 6`) |
-| Related Time Card | `{{ b.id }}` |
-| Day Index | `0` |
-| Work Date | `{{ b.sunday_day }}` (fid 315; Mon 316 … Sat 321) |
-| Hours | `{{ b.sunday or 0 }}` (fid 23; Mon 10, Tue 11, Wed 12, Thu 13, Fri 14, Sat 24) |
-| Employee | `{{ b.employee }}` (fid 17) |
-| BU Code / BU Name / BU Full Name | `{{ b.business_unit_code }}` / `{{ b.business_unit_name }}` / `{{ b.business_unit_full_name }}` |
-| Legacy BU | `{{ b.legacy_business_unit }}` |
-| Project Name / Project Type | `{{ b.project_name }}` / `{{ b.project_type }}` |
-| Time Card Title / Time Card Type | `{{ b.time_card_title }}` / `{{ b.time_card_type }}` |
-| Hyderabad Project | `{{ b.hyderabad_project_project_identifier }}` |
-| Billable? | `{{ b.billable }}` |
-| Snapshot Written | `{{ time.now }}` |
-
-Jinja field names are Pipelines' generated slugs. Check them against the field picker when building; they may differ.
-
-**Invalid-input guard:** none needed. Every input either maps one-to-one or defaults to 0. (Steps b–d are the stale-data, deleted-card and boundary guards.) A card with no Task writes blank BU/project, which shows as "(no BU)" in reports instead of being guessed.
-
-### Delete Record Pipeline: add one step *(existing Pipeline)*
-
-The Pipeline triggered by Delete Record (TC fid 268) hard-deletes the card. Add one step **before** it deletes the card:
-
-| Step | Type | Configuration |
-|---|---|---|
-| **Delete day records** | Quickbase → Delete Records (or Search Records + loop → Delete Record), table Time Card Days | Query: `Related Time Card = {{ <trigger>.id }}`. That matches 0 records for cards outside the backfill window, and that's fine |
-
-Doing it first matters. Once the card is gone, its ID is only recoverable from the orphans themselves.
+**Pipelines naming.** In Jinja, Pipelines refers to fields by slugs generated from their labels (for example `{{ b.sunday_day }}` for "Sunday - Day"). The slugs below are best guesses. **Pick each field from the field picker** instead of typing it, and check the result matches the intended fid.
 
 ### Pipeline B — "Time Card Days: orphan sweep"
 
 | Step | Type | Configuration |
 |---|---|---|
-| **a. Trigger** | Schedule | Nightly, outside working hours (e.g. 02:00) |
-| **b. Delete orphans** | Quickbase → Delete Records (or Search Records + loop → Delete Record), table Time Card Days | Query: `Orphan = true` (or report R8) |
+| **a. Trigger** | Schedule | Daily at 02:00 (outside working hours) |
+| **b. Find orphans** | Quickbase → Search Records, table Time Card Days | Query: **Orphan (37) is true** |
+| **c. For each** | Loop over b | |
+| **c1. Delete** | Quickbase → Delete Record, table Time Card Days | Record ID = `{{ c.id }}` (the looped record) |
 
-This catches day records whose card was deleted by any route other than the Delete Record Pipeline. It's normally a no-op. If R8 has records most mornings, find out who is deleting cards outside the Delete Record Pipeline.
+If your Pipelines has a query-based **Delete Records** step, it can replace b–c1 with one step: table Time Card Days, query Orphan (37) is true.
+
+It's normally a no-op, because Search Records finds nothing. **Test (V13):** turn it on, delete a test card directly (not through Delete Record), check that its 7 records appear on R8, then run B by hand and check that they're gone.
+
+### Delete Record Pipeline — add one step *(existing Pipeline)*
+
+The Delete Record Pipeline is the only thing that deletes the card. There is no separate webhook (confirmed 2026-10-14. The usage API counts the Pipeline's own trigger as a webhook; see section 17, step 2 of the cleanup checklist). Add the new steps **before** its existing delete step.
+
+| Step | Type | Configuration |
+|---|---|---|
+| **New: find day records** | Quickbase → Search Records, table Time Card Days | Query: **Related Time Card (22) equals** `{{ <trigger>.id }}`, the card's Record ID# |
+| **New: for each → delete** | Loop → Quickbase → Delete Record, table Time Card Days | Record ID = the looped record's ID |
+| *(existing)* delete the card | | Unchanged, now **after** the new steps |
+
+A card outside the backfill window has no day records, so the search finds nothing and the loop does nothing. That's expected.
+
+**Test (V4):** on a test card that has day records, check Delete Record. The card and all 7 day records should be gone, and R8 should stay empty.
+
+### Pipeline A — "Time Card Days: sync on change"
+
+| Step | Type | Configuration |
+|---|---|---|
+| **a. Trigger** | Quickbase → Record event, table Time Cards. Events: **created** and **updated** | **Only when these fields change** (no-op guard): Date (9), Sunday (23), Monday (10), Tuesday (11), Wednesday (12), Thursday (13), Friday (14), Saturday (24), Related Task (57), Related Employee (15). Don't watch formula or lookup fields; a change filter never fires on them (critical note #1) |
+| **b. Re-read card** (stale-data guard) | Quickbase → Look Up a Record, table Time Cards | Record ID# = `{{ a.id }}`. If not found: **continue, don't fail**. Every later step reads from **b**, never **a** (critical note #9) |
+| **c. Condition** (deleted-card and boundary guard) | If / condition | **b found a record** AND **b Week Ending (7) ≥ 2026-08-26**. If not, the run ends with no changes: the card was deleted mid-run, or it's older than the backfill window. Update the date together with D2 and Day Records Out of Sync (TC 328) |
+| **d. Prepare** (inside the "yes" branch) | Quickbase → Prepare Bulk Record Upsert | Table: Time Card Days. **Merge field: Day Key (6)**. Fields: 6–22 as in the mapping |
+| **e.–k. Add rows ×7** | Quickbase → Add a Bulk Upsert Row | One per Day Index 0 (Sun) to 6 (Sat). Mapping below |
+| **l. Commit** | Quickbase → Commit Upsert | |
+
+**Row mapping.** The fixed fields are the same on all 7 rows:
+
+| Time Card Days field (fid) | Value | Source on Time Cards |
+|---|---|---|
+| Related Time Card (22) | `{{ b.id }}` | Record ID# (3) |
+| Employee (10) | `{{ b.employee }}` | Employee (17), a user field. If the step wants an email or user ID, use Related Employee (15) |
+| BU Code (11) | `{{ b.business_unit_code }}` | 296 |
+| BU Name (12) | `{{ b.business_unit_name }}` | 297 |
+| BU Full Name (13) | `{{ b.business_unit_full_name }}` | 309 |
+| Legacy BU (14) | `{{ b.legacy_business_unit }}` | 128 |
+| Project Name (15) | `{{ b.project_name }}` | 300 |
+| Project Type (16) | `{{ b.project_type }}` | 298 |
+| Time Card Title (17) | `{{ b.time_card_title }}` | 137 |
+| Time Card Type (18) | `{{ b.time_card_type }}` | 151 |
+| Hyderabad Project (19) | `{{ b.hyderabad_project_project_identifier }}` | 273 |
+| Billable? (20) | `{{ b.billable }}` | 299 |
+| Snapshot Written (21) | `{{ time.now }}` | Run time |
+
+The day-specific fields differ on each row:
+
+| Row | Day Key (6) | Day Index (7) | Work Date (8), from Time Cards | Hours (9), from Time Cards |
+|---|---|---|---|---|
+| e | `{{ (b.id \| int) * 10 + 0 }}` | 0 | `{{ b.sunday_day }}` (315) | `{{ b.sunday or 0 }}` (23) |
+| f | `{{ (b.id \| int) * 10 + 1 }}` | 1 | `{{ b.monday_day }}` (316) | `{{ b.monday or 0 }}` (10) |
+| g | `{{ (b.id \| int) * 10 + 2 }}` | 2 | `{{ b.tuesday_day }}` (317) | `{{ b.tuesday or 0 }}` (11) |
+| h | `{{ (b.id \| int) * 10 + 3 }}` | 3 | `{{ b.wednesday_day }}` (318) | `{{ b.wednesday or 0 }}` (12) |
+| i | `{{ (b.id \| int) * 10 + 4 }}` | 4 | `{{ b.thursday_day }}` (319) | `{{ b.thursday or 0 }}` (13) |
+| j | `{{ (b.id \| int) * 10 + 5 }}` | 5 | `{{ b.friday_day }}` (320) | `{{ b.friday or 0 }}` (14) |
+| k | `{{ (b.id \| int) * 10 + 6 }}` | 6 | `{{ b.saturday_day }}` (321) | `{{ b.saturday or 0 }}` (24) |
+
+Day Key **must** be computed as a number, as shown. Never build it by joining text (critical note #4). The `or 0` on Hours is required: blank day fields arrive as empty strings (critical note #3).
+
+**Invalid-input guard:** none needed beyond step c. Every input either maps one-to-one or defaults to 0. A card with no Task writes blank BU and project, which reports show as "(no BU)" instead of guessing.
+
+**Testing Pipeline A** (build sheet section 14). Leave A **off** while building, and run it by hand against one test card. Use a test task, and a week whose Week Ending is on or after 2026-08-26:
+
+| Check | Do | Expect |
+|---|---|---|
+| V1 | Create a test card for the week of 2026-09-20 with Mon 8 and Sat 2 | 7 day records. Mon 8.0 in `2026-09`, Sat 2.0 in `2026-10`, the rest 0.0. Day Keys = card ID × 10 + 0…6. Key Mismatch false |
+| V2 | Clear Monday | Same 7 records (Record ID#s unchanged), Mon now 0.0 |
+| V3 | Move the card's Date to the next week | Same 7 records, Work Dates +7, Date Drift false on all |
+| V10 | Edit only Notes | A doesn't run (activity log) |
+| V11 | Save Mon = 4 then Mon = 6 within seconds | Two runs. Mon = 6.0. Card not on R6 |
+| V12 | Save, then delete immediately | Run ends at step c. No records with Day Key between ID × 10 and ID × 10 + 6 |
+| V4 | Delete the test card through Delete Record | Card and its 7 records gone (also tests the delete step) |
+
+Then switch A on (build step 10). Check the Pipelines usage allowance first (O6): A runs about 760 cards a week × several edits, at about 12 steps per run.
+
+**After all three are on:** run the backfill (section 16), then check R6, R7 and R8 are empty.
 
 ---
+
 
 ## 16. One-time backfill
 
@@ -497,7 +546,7 @@ This catches day records whose card was deleted by any route other than the Dele
 
 **Cleanup status: in progress.** Deleted so far: 25–28, 80, 81, 117, 156, 157, 160, 191, 192 and 203 (2026-10-14; Time Cards now has 141 fields). Everything else is still only proposed. This is the production app, so each group is approved before anyone acts on it. Before deleting a field:
 1. Remove it from its forms and reports, and repoint any formula that uses it.
-2. Look up any Pipeline or webhook that uses it, using the Pipelines and webhooks pages in the Quickbase UI, because the API reports only counts.
+2. Look up any Pipeline that uses it in the Pipelines UI, because the API reports only counts. **The API's "webhooks" count includes a Pipeline's own Quickbase trigger**, so a field watched by a Pipeline trigger shows 1 Pipeline and 1 webhook even when the table's Webhooks page is empty (fid 268, confirmed 2026-10-14).
 3. Note the deletion in the Change Log table (`bv54hme8z`).
 
 Deleting a **reference field** (a "Related …" field) deletes its relationship and every lookup that goes through it.
@@ -539,7 +588,7 @@ Fields 310–312 reference nothing and have nothing referencing them, so they ar
 
 | fid | Field | Referenced by | Question |
 |---|---|---|---|
-| 268 | Delete Record | **1 Pipeline, 1 webhook** | **Keep** (decided 2026-10-14). Part of the delete trigger. Checking it starts the hard delete (O4) |
+| 268 | Delete Record | **1 Pipeline** (the usage API also counts 1 webhook; see note) | **Keep** (decided 2026-10-14). Part of the delete trigger. Checking it starts the hard delete (O4) |
 | 286–290 | Department / Location / Discipline / Project / Business Unit (at entry) | 1 form and **1 Pipeline** each | Which Pipeline was meant to fill these? It has never written a value. Turn it off, then delete (O3) |
 | 306 | Unlock Timecard | 1 field (probably the lock formula, fid 307), 1 form, 1 report | **Keep** (decided 2026-10-14). It's in use: it's the way to reopen a locked card ([4](#4-critical-implementation-notes) #5) |
 
