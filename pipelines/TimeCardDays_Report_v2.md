@@ -413,7 +413,7 @@ Roles as of 2026-10-14, from `API_GetRoleInfo`. A role added later needs the sam
 | V9 | **Reproducibility:** export R4 for `2026-09`. Change the BU on one of those cards' Tasks (test task or revert afterward). Re-run R4 | **Identical numbers** |
 | V10 | Edit an unrelated field on a card (e.g. Notes) | Pipeline A does not run (check the activity log) |
 | V11 | On a test card, save Mon = 4, then immediately Mon = 6 (two saves within a few seconds, e.g. grid edit) | Two runs in the activity log. Mon day record = 6.0. Card not on R6 |
-| V13 | Delete a test card directly (not through Delete Record), then run Pipeline B | Before the run: its 7 records are on R8 and missing from R1–R4. After the run: they're gone |
+| V13 | Delete a test card directly (not through Delete Record), then run Pipeline B | Before the run: its 7 records are on R8 and missing from R1–R4. Related Time Card (22) still shows the deleted card's ID (confirmed by Kris 2026-10-14), so orphans can be traced back to their card. Only the lookup TC - Record ID# (23) goes to 0, which is why Orphan tests fid 23. After the run: they're gone |
 | V12 | Save a test card, then delete it straight away, before the run finishes | Run ends at step c. A Time Card Days search for Day Key between `rid × 10` and `rid × 10 + 6` returns nothing |
 
 ---
