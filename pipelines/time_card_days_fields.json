@@ -1,0 +1,48 @@
+{
+  "table": {
+    "name": "Time Card Days",
+    "id": "bwe8cjimn"
+  },
+  "time_card_days": {
+    "Date Created": 1,
+    "Date Modified": 2,
+    "Record ID#": 3,
+    "Record Owner": 4,
+    "Last Modified By": 5,
+    "Day Key": 6,
+    "Day Index": 7,
+    "Work Date": 8,
+    "Hours": 9,
+    "Employee": 10,
+    "BU Code": 11,
+    "BU Name": 12,
+    "BU Full Name": 13,
+    "Legacy BU": 14,
+    "Project Name": 15,
+    "Project Type": 16,
+    "Time Card Title": 17,
+    "Time Card Type": 18,
+    "Hyderabad Project": 19,
+    "Billable?": 20,
+    "Snapshot Written": 21,
+    "Related Time Card": 22,
+    "TC - Record ID#": 23,
+    "TC - Week Beginning": 24,
+    "TC - Timecard Locked": 25,
+    "Accounting Period": 26,
+    "Period Start": 27,
+    "Period End": 28,
+    "In Current Period": 29,
+    "In Last Period": 32,
+    "BU (report)": 33,
+    "Date Drift": 34,
+    "Key Mismatch": 35,
+    "Provisional": 36,
+    "Orphan": 37
+  },
+  "time_cards": {
+    "Day Records - Hours": 326,
+    "Day Records - Count": 327,
+    "Day Records Out of Sync": 328
+  }
+}

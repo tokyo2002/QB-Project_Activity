@@ -6,7 +6,7 @@ Quickbase Pipelines, and the scripts that support them, for the Project Activity
 
 Splits each weekly time card into 7 daily records. That lets accounting report hours for any date range, including their 26th-to-25th period, split by business unit and project.
 
-**Status:** Designed, not built. Build sheet: [`TimeCardDays_Report_v2.md`](TimeCardDays_Report_v2.md) (current). v1 is kept for history.
+**Status:** Table built 2026-10-14 (`bwe8cjimn`, empty), by `scripts/build_time_card_days.py`. Roles set (admin-only). Next: the delete Pipelines, Pipeline A, and the backfill. Build sheet: [`TimeCardDays_Report_v2.md`](TimeCardDays_Report_v2.md) (current). v1 is kept for history.
 
 ### Decisions
 

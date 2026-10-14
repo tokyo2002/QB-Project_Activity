@@ -22,6 +22,7 @@ Build sheet, **v2** · 2026-10-09 · App: Project Activity (`bg86uwfcw`) · Prod
 - [14. Validation checklist](#14-validation-checklist)
 - [15. Pipelines](#15-pipelines)
 - [16. One-time backfill](#16-one-time-backfill)
+- [17. Time Cards field audit and cleanup](#17-time-cards-field-audit-and-cleanup)
 - [Appendix — conventions](#appendix--conventions)
 
 ---
@@ -30,6 +31,8 @@ Build sheet, **v2** · 2026-10-09 · App: Project Activity (`bg86uwfcw`) · Prod
 
 | Version | Date | Change |
 |---|---|---|
+| v2 (amended) | 2026-10-14 | **Quickbase has no cascade delete.** Earlier versions relied on a relationship setting that doesn't exist. Day records are now removed by a step added to the Delete Record (fid 268) Pipeline, plus **Pipeline B**, a nightly orphan sweep. Added the lookup 4c TC - Record ID# and the formula Orphan. Reports filter `Orphan = false`. Rewrote critical note #7, relationship 3a, build order steps 4 and 9–10, and check V4. Added V13. |
+| v2 (amended) | 2026-10-14 | Added [17](#17-time-cards-field-audit-and-cleanup), a field audit of Time Cards with a proposed cleanup. Updated O3 and O4 with what the audit found. No change to the design. |
 | v2 | 2026-10-09 | Pipeline A handles quick repeated saves: (1) step b re-reads the card's **current** values instead of using the trigger's copy, so a run that finishes late can't overwrite newer hours with older ones; (2) step c stops if the card has been deleted, so a late run can't recreate orphan day records after the cascade delete. Field mapping moves from `a.` to `b.`. Added critical note #9 and checks V11–V12. |
 | v1 | 2026-10-09 | First design. Daily child table, snapshot BU/project, accounting period 26th–25th, backfill from 2026-08-26. Day Key is numeric: `Record ID# × 10 + Day Index`. |
 
@@ -87,7 +90,7 @@ One Time Card Days record carries every one of these at once, and each value is 
 | Table | DBID | Status | Role in this design |
 |---|---|---|---|
 | Time Cards | `bhm9822gc` | Existing | Parent, system of record. ~123k records, ~760 new per week |
-| **Time Card Days** | *(new)* | Specified | Child. 7 records per in-scope time card |
+| **Time Card Days** | `bwe8cjimn` | Built 2026-10-14 (no records yet) | Child. 7 records per in-scope time card |
 | Tasks | `biwfb28d9` | Existing | Source of BU and project, reached through TC lookups. Not touched |
 | Business Units | *(existing, via Task fid 284)* | Existing | Not touched |
 
@@ -116,7 +119,7 @@ These fail **silently**, with no error, just wrong numbers.
    Day Key is **numeric** on purpose. A text key such as `98213-6` could be built two ways (`98,213-6`, `98213.0-6`) by a Pipeline or script formatting quirk, and each spelling would quietly become a separate record. A number has only one value. Give it 0 decimals and no thousands separator so it displays the same way it's stored.
 5. **A period isn't final until the last week in it locks.** A card stays editable until it is 14 days past Week Beginning (TC fid 307), or longer if someone ticks Unlock Timecard. For the period ending Thu 2026-09-25, the last week starts Sun 09-20 and locks on **Mon 2026-10-05**. A report pulled on 09-26 is provisional ([9.3](#93-when-a-period-is-final)).
 6. **Never `Hours = Total Regular Hours / 7`.** Spreading a week evenly is the approximation this whole design exists to avoid.
-7. **Cascade delete through the relationship, not a Pipeline.** Set "delete child records when the parent is deleted" on relationship 3a. A Pipeline "on delete" trigger can't read the deleted record's ID reliably enough to clean up. Note the separate soft-delete checkbox, Delete Record (TC fid 268): see O4.
+7. **Quickbase has no cascade delete.** Deleting a Time Card leaves its 7 day records behind as orphans, and they keep counting in reports. Two layers handle this ([15](#15-pipelines)). (1) The existing Delete Record Pipeline deletes the card's day records (`Related Time Card` = the card's ID) **before** it deletes the card, while the ID is still known. Delete Record (TC fid 268) is the trigger for the hard delete, not a soft delete: a checked card is deleted, which is why the audit found no checked cards (O4). (2) **Pipeline B** sweeps nightly for orphans left by any other route: an admin deleting cards by hand or in bulk, or a late Pipeline A run (#9). Until the sweep runs, the **Orphan** formula (true when the lookup TC - Record ID# is blank) keeps them out of every report.
 8. **Pause Pipeline A during bulk Time Card edits or imports.** Every touched card is one Pipeline run with about 10 steps. Run the refresh script afterward instead.
 9. **Quick repeated saves start overlapping Pipeline runs.** Someone saving a card twice in a few seconds starts two runs of Pipeline A, and they can finish in either order. If the rows were built from the trigger's copy of the card, a late-finishing older run would overwrite newer hours, and a run for a card deleted in the meantime would recreate its 7 records with no parent. Pipeline A therefore **re-reads the card** (step b) and **stops if it's gone** (step c). A small window remains: run 1 re-reads, run 2 re-reads and commits, then run 1 commits. That needs two saves within the second or two a run takes. The **Day Records Out of Sync** flag (R6) shows any card where it happens, and the next edit or refresh run corrects it.
 
@@ -156,19 +159,62 @@ Key field: **Day Key** [before 3a]. Record name in reports: Time Card Title + Wo
 | BU (report) | Formula – Text | D | `If(Trim([BU Full Name]) = "", "(no BU)", [BU Full Name])` | Group on this, not the raw field, so blanks get a visible label |
 | TC - Week Beginning | Lookup | D | 4a | |
 | TC - Timecard Locked | Lookup | D | 4b | |
+| TC - Record ID# | Lookup | D | 4c | Blank once the card is deleted |
 | Date Drift | Formula – Checkbox | D | `[Work Date] <> [TC - Week Beginning] + Days([Day Index])` | True means the card's Date moved and this record wasn't rewritten. See check V6 |
 | Key Mismatch | Formula – Checkbox | D | `[Day Key] <> [Related Time Card] * 10 + [Day Index]` | True means a writer built the key wrong. Should never be true. See check V6 |
 | Provisional | Formula – Checkbox | D | `not [TC - Timecard Locked]` | Hours can still change |
+| Orphan | Formula – Checkbox | D | `IsNull([TC - Record ID#])` | True means the card was deleted and Pipeline B hasn't swept this record yet. Every report filters it out. See critical note #7 |
+
+### 5.1.1 As built (2026-10-14)
+
+Table `bwe8cjimn` (alias `_DBID_TIME_CARD_DAYS`), built by `scripts/build_time_card_days.py`. IDs are also in [`time_card_days_fields.json`](time_card_days_fields.json). Pipeline A and the backfill script use these.
+
+| fid | Field |
+|---|---|
+| 6 | Day Key |
+| 7 | Day Index |
+| 8 | Work Date |
+| 9 | Hours |
+| 10 | Employee |
+| 11 | BU Code |
+| 12 | BU Name |
+| 13 | BU Full Name |
+| 14 | Legacy BU |
+| 15 | Project Name |
+| 16 | Project Type |
+| 17 | Time Card Title |
+| 18 | Time Card Type |
+| 19 | Hyderabad Project |
+| 20 | Billable? |
+| 21 | Snapshot Written |
+| 22 | Related Time Card |
+| 23 | TC - Record ID# |
+| 24 | TC - Week Beginning |
+| 25 | TC - Timecard Locked |
+| 26 | Accounting Period |
+| 27 | Period Start |
+| 28 | Period End |
+| 29 | In Current Period |
+| 32 | In Last Period |
+| 33 | BU (report) |
+| 34 | Date Drift |
+| 35 | Key Mismatch |
+| 36 | Provisional |
+| 37 | Orphan |
+
+Fids 30–31 were throwaway test fields, already deleted. Day Key is Unique and Required. The table's key field is still Record ID# (fid 3). Upserts only need Day Key to be Unique.
 
 ### 5.2 Time Cards *(existing: add fields only)*
 
 | Field | Type | Tag | Value / formula | Notes |
 |---|---|---|---|---|
-| Day Records - Hours | Summary | D | 5a | |
-| Day Records - Count | Summary | D | 5b | |
-| Day Records Out of Sync | Formula – Checkbox | D | `[Week Ending] >= Date(2026,8,26) and ([Day Records - Count] <> 7 or [Total Hours] <> [Day Records - Hours])` | [after 5a, 5b]. Update the date if the backfill is extended (D2) |
+| Day Records - Hours (fid 326) | Summary | D | 5a | |
+| Day Records - Count (fid 327) | Summary | D | 5b | |
+| Time Card Day records (fid 324) | Report link | D | Created automatically with relationship 3a | Not on any form. Can be embedded on an admin form to show a card's day records |
+| ~~Add Time Card Day (fid 325)~~ | Formula – URL | D | Created automatically with relationship 3a | **Deleted 2026-10-14**: day records are system-written only (relationship 3a) |
+| Day Records Out of Sync (fid 328) | Formula – Checkbox | D | `[Week Ending] >= Date(2026,8,26) and ([Day Records - Count] <> 7 or [Total Hours] <> [Day Records - Hours])` | [after 5a, 5b]. Update the date if the backfill is extended (D2) |
 
-The existing "(at entry)" fields on Time Cards (fids 286–290) have **never been populated**: 0 records. This design does **not** use them. See O3.
+The existing "(at entry)" fields on Time Cards (fids 286–290) have **never been populated**: 0 records. This design does **not** use them. See O3 and [17](#17-time-cards-field-audit-and-cleanup).
 
 ---
 
@@ -176,7 +222,7 @@ The existing "(at entry)" fields on Time Cards (fids 286–290) have **never bee
 
 | ID | Parent → Child | Reference field | Settings |
 |---|---|---|---|
-| 3a | Time Cards → Time Card Days | Related Time Card | **Delete child records when the parent is deleted: ON.** Don't add "Add Time Card Day" buttons or embedded add forms; records are system-written only. [after Day Key is set as key] |
+| 3a | Time Cards → Time Card Days | Related Time Card | Quickbase has **no cascade delete**. Deleting is handled by Pipelines (critical note #7). Don't add "Add Time Card Day" buttons or embedded add forms; records are system-written only. [after Day Key is set Unique] |
 
 ---
 
@@ -188,6 +234,7 @@ On Time Card Days, through 3a:
 |---|---|---|
 | 4a | TC - Week Beginning | Week Beginning (fid 8) |
 | 4b | TC - Timecard Locked | Timecard Locked (fid 307) |
+| 4c | TC - Record ID# | Record ID# (fid 3). Feeds Orphan |
 
 BU and project are deliberately **not** lookups. See the snapshot decision in [1](#1-design-model-read-first).
 
@@ -255,11 +302,11 @@ var date p = If(Day($t) >= 26, AdjustMonth(FirstDayOfMonth($t), 1), FirstDayOfMo
 [Accounting Period] = ToText(Year($p)) & "-" & PadLeft(ToText(Month($p)), 2, "0")
 ```
 
-**In Last Period** (checkbox): same as above, but with `var date t = Today();` replaced by:
+**In Last Period** (checkbox): same as above, but with `var date t = Today();` replaced by the lines below. Formula variable names must be **letters only**: Quickbase rejects `$t0` or `$p0` as a syntax error (found 2026-10-14).
 ```
-var date t0 = Today();
-var date p0 = If(Day($t0) >= 26, AdjustMonth(FirstDayOfMonth($t0), 1), FirstDayOfMonth($t0));
-var date t = AdjustMonth($p0, -1);
+var date now = Today();
+var date pc = If(Day($now) >= 26, AdjustMonth(FirstDayOfMonth($now), 1), FirstDayOfMonth($now));
+var date t = AdjustMonth($pc, -1);
 ```
 `$t` is then the 1st of the previous period's month, which is always before the 26th, so `p` resolves to that month.
 
@@ -278,7 +325,7 @@ On the final date, run the **refresh** (`backfill_time_card_days.py --period YYY
 
 ## 10. Reports
 
-All on Time Card Days. Every report filters **Hours > 0**.
+All on Time Card Days. Every report filters **Hours > 0** and **Orphan = false**, except R6–R8.
 
 | # | Name | Type | Filter | Group / columns | Audience |
 |---|---|---|---|---|---|
@@ -289,6 +336,7 @@ All on Time Card Days. Every report filters **Hours > 0**.
 | R5 | Accounting – Last Period by Legacy BU | Summary | Same as R1 | Rows: Legacy BU → Project Name | Temporary, until O1 is decided |
 | R6 | Admin – Sync problems | Table on **Time Cards** | Day Records Out of Sync = true | Record ID#, Employee, Week Beginning, Total Hours, Day Records - Hours, Day Records - Count | Admin |
 | R7 | Admin – Date drift / key mismatch | Table | Date Drift = true OR Key Mismatch = true | Day Key, Related Time Card, Day Index, Work Date, TC - Week Beginning | Admin |
+| R8 | Admin – Orphans | Table | Orphan = true | Day Key, Related Time Card, Work Date, Hours, Snapshot Written | Admin. Should be empty the morning after Pipeline B runs. Pipeline B can also use it as its query |
 
 R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Project is not blank`, which matches report 207's scope (O5).
 
@@ -296,16 +344,18 @@ R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Projec
 
 ## 11. Build order
 
+Steps 1–7 were done on 2026-10-14 by `scripts/build_time_card_days.py`. Step 8 (roles) was done by hand on 2026-10-14. Step 9 onward is still to do.
+
 1. Create the table **Time Card Days**.
 2. Add **Day Key** (Numeric, 0 decimals, no thousands separator). Set it **Unique** and **Required**, then make it the **key field** [before 3a].
 3. Add the A and S fields from [5.1](#51-time-card-days-new).
-4. Create relationship **3a**, with cascade delete ON [after step 2].
-5. Add lookups **4a**, **4b**.
-6. Add the formula fields from [5.1](#51-time-card-days-new): Accounting Period, Period Start, Period End, In Current Period, In Last Period, BU (report), Date Drift, Key Mismatch, Provisional [after 4a, 4b].
+4. Create relationship **3a** [after step 2]. There is no cascade-delete setting; see steps 9–10.
+5. Add lookups **4a**, **4b**, **4c**.
+6. Add the formula fields from [5.1](#51-time-card-days-new): Accounting Period, Period Start, Period End, In Current Period, In Last Period, BU (report), Date Drift, Key Mismatch, Provisional, Orphan [after 4a, 4b, 4c].
 7. On Time Cards, add summaries **5a**, **5b**, then **Day Records Out of Sync** [after 5a, 5b].
-8. Grant roles access ([13](#13-roles--permissions)).
+8. Set roles ([13](#13-roles--permissions)): every non-admin role gets **None** and **Hide** on Time Card Days. By hand, because the API can't do it.
 9. Build **Pipeline A** ([15](#15-pipelines)) and test it on one card ([14](#14-validation-checklist), checks V1–V4). Export its YAML into `pipelines/`.
-10. Turn Pipeline A **on**.
+10. Add the day-record delete step to the **Delete Record Pipeline**, and build **Pipeline B** ([15](#15-pipelines)). Test with V4 and V13. Then turn Pipelines A and B **on**.
 11. Run the **backfill** ([16](#16-one-time-backfill)). Order relative to step 10 doesn't matter, because writes are upserts on Day Key. Doing step 10 first means no edits are missed in between.
 12. Build reports R1–R7.
 13. Run the validation checklist ([14](#14-validation-checklist)).
@@ -318,10 +368,11 @@ R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Projec
 |---|---|---|
 | O1 | **Open** | **Which BU does accounting mean?** Report 207 points to the new BU (Task → Business Unit). That only appears from about 2026-08-09 and is sparse before the week of 2026-10-04. Both are snapshotted, so the answer changes only which reports are kept (R1 vs R5). It doesn't change the table. If the answer is "new BU", ask accounting how to treat `(no BU)` hours in the 2026-09 period. |
 | O2 | **Open** | Confirm with accounting that the period is named by the month it ends in (`2026-09` = Aug 26 – Sep 25). Changing the name later is a formula edit and needs no data rework. |
-| O3 | **Open** | The Time Cards fields Department / Location / Discipline / Project / Business Unit (at entry), fids 286–290, exist but are empty. Find out who created them and why before adding parallel snapshots. If that effort is dead, consider deleting them later ("never delete before repointing" applies). |
-| O4 | **Open** | **Delete Record (TC fid 268) soft delete.** If cards are marked rather than truly deleted, their day records keep counting. Decide whether to snapshot this flag and filter on it, or confirm that a later process hard-deletes these cards. |
+| O3 | **Open** | The Time Cards fields Department / Location / Discipline / Project / Business Unit (at entry), fids 286–290, have **never held a value** (audit, 2026-10-14). That effort is dead, and this design keeps its own snapshot on Time Card Days. **Each field is still referenced by one Pipeline and one form.** Find that Pipeline before deleting them. See [17](#17-time-cards-field-audit-and-cleanup), group C. |
+| O4 | **Closed** 2026-10-14 | **Delete Record (TC fid 268).** This is part of the delete trigger (confirmed 2026-10-14): checking it starts the Pipeline and webhook that hard-delete the card. A step added to that Pipeline removes the card's day records first (critical note #7), so Time Card Days doesn't need to snapshot or filter on it. **Keep the field.** |
 | O5 | **Open** | Should accounting reports be all BUs, or Hyderabad-only like report 207? |
 | O6 | **Open** | Pipelines usage: Pipeline A fires on every hours edit, about 760 cards per week × several edits. Check the account's Pipelines step/run allowance. |
+| O7 | **Deferred** | **Accounting access.** There is no Accounting role. Until it's decided, only admins can see Time Card Days and run R1–R5. Options: a new Accounting role with View (recommended), View for an existing role, or admins export the reports. Decide before step 12 (reports) goes to accounting. |
 | D1 | Deferred | **Automate the period-close refresh.** Now: run the script manually on the date in [9.3](#93-when-a-period-is-final). Later: a scheduled Pipeline that rewrites cards where `Week Ending ≥ Period Start` of the just-finalized period. It needs a loop over about 3k cards, so check O6 first. |
 | D2 | Deferred | **Extend the backfill to earlier history.** Run the script with an earlier `--since` and update the cutoff date in "Day Records Out of Sync". ⚠ **Unrecoverable if postponed:** a snapshot captures BU and project *as they are when written*. Backfilling old periods later will record today's Task → BU/project assignments, not the ones in force at the time. If old periods will ever matter, back them up sooner rather than later. |
 | X1 | **Declined** | *Formula-only split on Time Cards* (e.g. "Hours in start period" and "Hours in end period" fields). A report can't merge two hour columns into one group per period. |
@@ -334,11 +385,14 @@ R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Projec
 
 ## 13. Roles & permissions
 
-| Role | Time Card Days | Notes |
-|---|---|---|
-| Accounting (or whichever role they use) | View all | Needs view on reports R1–R5 |
-| Employees (standard user roles) | None, or view own (`Employee = [Current User]`) | Not needed for this feature |
-| Admin / Pipeline user | Full | Pipeline A and the script run as this user. **No other role** should have Add/Modify on Time Card Days |
+**Decision (2026-10-14):** Time Card Days is **admin-only for now**. **Set on 2026-10-14.** Accounting access is deferred (O7). Role permissions can't be set through the API; they're set by hand under Settings → Roles → *role*.
+
+| Role | Permissions tab: Time Card Days | User Interface tab | Notes |
+|---|---|---|---|
+| Administrator (12) | Full | Shown | Pipelines A and B, the delete Pipeline and the scripts run as an admin user |
+| All 18 other roles: Purchasing (33), Hyderabad Projects Creator (59), Engineering (38), Project Coordinator (50), Project Manager (32), Project Manager Sri City (56), DataBase Coordinator (26), Field Service (41), Design Lead (44), Manufacturing Engineering (46), Master Scheduler (47), Executive (48), Participant with Resource Rights (49), Persons In Responsible Charge NP (51), Howden India Creator (58), Howden India Participant (57), Participant (11), Viewer (10) | **None** | **Hide** ticked | Hide only removes the table from the table bar. **None** is what blocks access. Don't use the table's own "Show in the table bar" setting, which hides it from admins too |
+
+Roles as of 2026-10-14, from `API_GetRoleInfo`. A role added later needs the same two settings.
 
 ---
 
@@ -349,7 +403,7 @@ R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Projec
 | V1 | Create a test time card for the week of 2026-09-20 with Mon 8 and Sat 2 | 7 day records. Mon 8.0 in `2026-09`, Sat 2.0 in `2026-10`, the rest 0.0 |
 | V2 | Edit that card and clear Monday | Same 7 records (Record ID#s unchanged). Mon is now 0.0. Still 7, no duplicates |
 | V3 | Change the card's Date to a day in the following week | Same 7 records. Work Dates shift +7. R7 (Date Drift) is empty |
-| V4 | Delete the test card | Its 7 day records are gone |
+| V4 | Delete the test card by checking Delete Record (fid 268) | The card and its 7 day records are gone. R8 is empty |
 | V5 | Re-run the backfill for the same range | Day record count unchanged. Snapshot Written timestamps update |
 | V6 | After the backfill: R6 and R7 | Both empty |
 | V7 | Pick 3 cards across a period boundary and calculate their period hours by hand from the day columns | Matches R4 for those cards |
@@ -357,6 +411,7 @@ R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Projec
 | V9 | **Reproducibility:** export R4 for `2026-09`. Change the BU on one of those cards' Tasks (test task or revert afterward). Re-run R4 | **Identical numbers** |
 | V10 | Edit an unrelated field on a card (e.g. Notes) | Pipeline A does not run (check the activity log) |
 | V11 | On a test card, save Mon = 4, then immediately Mon = 6 (two saves within a few seconds, e.g. grid edit) | Two runs in the activity log. Mon day record = 6.0. Card not on R6 |
+| V13 | Delete a test card directly (not through Delete Record), then run Pipeline B | Before the run: its 7 records are on R8 and missing from R1–R4. After the run: they're gone |
 | V12 | Save a test card, then delete it straight away, before the run finishes | Run ends at step c. A Time Card Days search for Day Key between `rid × 10` and `rid × 10 + 6` returns nothing |
 
 ---
@@ -371,7 +426,7 @@ Store each Pipeline's exported YAML in this folder after building it: `pipelines
 |---|---|---|
 | **a. Trigger** | Quickbase → Record created / updated, table Time Cards | **Fields to watch** (no-op guard): Date (9), Sunday (23), Monday (10), Tuesday (11), Wednesday (12), Thursday (13), Friday (14), Saturday (24), Related Task (57), Related Employee (15). Formula fields aren't used here; see [4](#4-critical-implementation-notes) #1 |
 | **b. Re-read card** (stale-data guard) | Quickbase → Look Up a Record, table Time Cards | Record ID# = `{{ a.id }}`. If not found: **don't fail**, continue to c with nothing found. Every later step reads from **b**, never **a**: the trigger's copy is the card as it was at *that* save, while b is the card as it is *now*. See [4](#4-critical-implementation-notes) #9 |
-| **c. Condition** (deleted-card guard) | If | b found no record → **end**. The card was deleted after this run started. The cascade delete already removed its day records, and continuing would recreate them as orphans |
+| **c. Condition** (deleted-card guard) | If | b found no record → **end**. The card was deleted after this run started. Its day records were removed by the delete Pipelines (critical note #7), and continuing would recreate them as orphans. If one slips through, Pipeline B sweeps it |
 | **d. Condition** (boundary guard) | If | `{{ b.week_ending }}` **≥ 2026-08-26**. Otherwise end. Update this together with D2 |
 | **e. Prepare** | Quickbase → Prepare Bulk Record Upsert | Table: Time Card Days. **Merge field: Day Key** |
 | **f.–l. Add rows ×7** | Quickbase → Add a Bulk Upsert Row | One per Day Index 0–6. Field mapping below |
@@ -399,6 +454,25 @@ Jinja field names are Pipelines' generated slugs. Check them against the field p
 
 **Invalid-input guard:** none needed. Every input either maps one-to-one or defaults to 0. (Steps b–d are the stale-data, deleted-card and boundary guards.) A card with no Task writes blank BU/project, which shows as "(no BU)" in reports instead of being guessed.
 
+### Delete Record Pipeline: add one step *(existing Pipeline)*
+
+The Pipeline triggered by Delete Record (TC fid 268) hard-deletes the card. Add one step **before** it deletes the card:
+
+| Step | Type | Configuration |
+|---|---|---|
+| **Delete day records** | Quickbase → Delete Records (or Search Records + loop → Delete Record), table Time Card Days | Query: `Related Time Card = {{ <trigger>.id }}`. That matches 0 records for cards outside the backfill window, and that's fine |
+
+Doing it first matters. Once the card is gone, its ID is only recoverable from the orphans themselves.
+
+### Pipeline B — "Time Card Days: orphan sweep"
+
+| Step | Type | Configuration |
+|---|---|---|
+| **a. Trigger** | Schedule | Nightly, outside working hours (e.g. 02:00) |
+| **b. Delete orphans** | Quickbase → Delete Records (or Search Records + loop → Delete Record), table Time Card Days | Query: `Orphan = true` (or report R8) |
+
+This catches day records whose card was deleted by any route other than the Delete Record Pipeline. It's normally a no-op. If R8 has records most mornings, find out who is deleting cards outside the Delete Record Pipeline.
+
 ---
 
 ## 16. One-time backfill
@@ -410,6 +484,88 @@ Jinja field names are Pipelines' generated slugs. Check them against the field p
 - **Volume:** about 3k cards, so about 21k rows, or about 45 API calls.
 - **Dry run output:** card count, row count, total hours by Accounting Period. Compare these against Time Cards before using `--apply`.
 - **Pipeline A** can stay on. Writes to Time Card Days don't trigger it.
+
+---
+
+## 17. Time Cards field audit and cleanup
+
+**Audit date:** 2026-10-14. The audit was read-only, through the API. Time Cards has 154 fields. 18,385 cards were created between 2026-01-01 and the audit date.
+
+**Method.** For each field, count the cards created since 2026-01-01 that have a value. For checkboxes, a value means checked. Fields with no values, or with values on under 1% of those cards, were then checked two more ways:
+- the number of cards with a value at any time, and the most recent card created with one;
+- what references the field, from `GET /v1/fields/usage/{fid}`. That shows counts of forms, reports, personal reports, fields, relationships, Pipelines and webhooks, but not their names.
+
+**Cleanup status: in progress.** Deleted so far: 25–28, 80, 81, 117, 156, 157, 160, 191, 192 and 203 (2026-10-14; Time Cards now has 141 fields). Everything else is still only proposed. This is the production app, so each group is approved before anyone acts on it. Before deleting a field:
+1. Remove it from its forms and reports, and repoint any formula that uses it.
+2. Look up any Pipeline or webhook that uses it, using the Pipelines and webhooks pages in the Quickbase UI, because the API reports only counts.
+3. Note the deletion in the Change Log table (`bv54hme8z`).
+
+Deleting a **reference field** (a "Related …" field) deletes its relationship and every lookup that goes through it.
+
+### A. Never used, references are only forms and reports. Proposed: delete
+
+| fid | Field | Kind | Referenced by |
+|---|---|---|---|
+| ~~25~~ | ~~Related Task3~~ **Deleted 2026-10-14** | reference | 3 fields, 1 form, 1 report, 1 personal report |
+| ~~26~~ | ~~Task Title~~ **Deleted 2026-10-14** | lookup (via 25) | 2 forms, 2 reports, 2 personal reports |
+| ~~27~~ | ~~Task - Description~~ **Deleted 2026-10-14** | lookup (via 25) | 1 report, 1 personal report |
+| ~~28~~ | ~~Task - Status~~ **Deleted 2026-10-14** | lookup (via 25) | 1 report, 1 personal report |
+| ~~81~~ | ~~User - ID Number~~ **Deleted 2026-10-14**, along with fid 80 User - Cost Center (most likely a lookup. Over 1% of 2026 cards had a value in it, so it wasn't in the audit list) | lookup | 1 form, 2 personal reports |
+| ~~117~~ | ~~User - Department Head2~~ **Deleted 2026-10-14** | lookup | 3 forms, 6 personal reports |
+| ~~160~~ | ~~Relationship~~ **Deleted 2026-10-14** | formula | 2 forms, 1 report, 1 personal report |
+| ~~191~~ | ~~Task - Related Project2 - Product Name~~ **Deleted 2026-10-14** | lookup | 1 field |
+| ~~192~~ | ~~UserEmail~~ **Deleted 2026-10-14** | lookup | none besides its relationship |
+| ~~203~~ | ~~Task - Kaizen Title~~ **Deleted 2026-10-14**. Its source, Tasks 133 Kaizen Title, comes through Tasks 132 Related Kaizen, a cross-app link to `bm2z7dk2m` that no task has ever used | lookup | 1 field |
+| 274 | Related Department | reference | 2 fields (its lookups) |
+| 275 | Department | lookup (via 274) | none besides its relationship |
+| 283 | Related User - Project Activity | reference | 5 fields, 1 form |
+| 284 | Related User - Project Activity - User Name | lookup (via 283) | 1 form |
+| 285 | Related User - Project Activity - Home Department - Manager - User Name | lookup (via 283) | 1 form |
+| 291 | Related User - Project Activity - User Location | lookup (via 283) | none besides its relationship |
+| 310 | Employees Current Department (formula) | formula | nothing |
+| 311 | Employees Current Location (formula) | formula | nothing |
+| 312 | Employees Current Discipline (formula) | formula | nothing |
+
+Fields 310–312 reference nothing and have nothing referencing them, so they are the safest place to start.
+
+### B. Never used, but a Pipeline references it. Proposed: find the Pipeline first
+
+| fid | Field | Referenced by |
+|---|---|---|
+| ~~156~~ | ~~Related Continuous Improvement Project~~ **Deleted 2026-10-14**. Watch the Pipeline that referenced it for failures | 2 fields, 2 forms, 1 personal report, **1 Pipeline** |
+| ~~157~~ | ~~Related Continuous Improvement Project - Project Name~~ **Deleted 2026-10-14** | 1 field, 2 reports |
+
+### C. Never used, part of an unfinished or unclear feature. Proposed: decide, then delete or keep
+
+| fid | Field | Referenced by | Question |
+|---|---|---|---|
+| 268 | Delete Record | **1 Pipeline, 1 webhook** | **Keep** (decided 2026-10-14). Part of the delete trigger. Checking it starts the hard delete (O4) |
+| 286–290 | Department / Location / Discipline / Project / Business Unit (at entry) | 1 form and **1 Pipeline** each | Which Pipeline was meant to fill these? It has never written a value. Turn it off, then delete (O3) |
+| 306 | Unlock Timecard | 1 field (probably the lock formula, fid 307), 1 form, 1 report | **Keep** (decided 2026-10-14). It's in use: it's the way to reopen a locked card ([4](#4-critical-implementation-notes) #5) |
+
+### D. Used in the past, not used in 2026. Proposed: remove from forms, keep the fields
+
+| fid | Field | Kind | Cards ever | Last card with a value | Referenced by |
+|---|---|---|---|---|---|
+| 20 | Product - Description | lookup | 41 | 2025-05-21 | 4 reports, 5 personal reports |
+| 186 | Service Ticket - Product Name | lookup | 267 | 2025-10-28 | 1 field |
+| 249 | Related Vaporizer WorkSheet | reference | 45 | 2023-06-08 | 3 fields, 1 form, 1 Pipeline |
+| 250 | Vaporizer Sales Order | lookup (via 249) | 43 | 2023-06-08 | 1 form, 1 report |
+
+Deleting 249 would lose which cards were linked to which worksheet. The lookups 20 and 186 hold no data of their own and could be deleted, but they are cheap to keep.
+
+### E. Rarely used in 2026 (under 1%) but still active. Proposed: keep, and ask the owners
+
+| Group | Reference fid | 2026 cards | Cards ever | Last card | Lookups on it |
+|---|---|---|---|---|---|
+| Engineering Service Request | 142 | 107 | 1,034 | 2026-10-11 | 144, 145, 162, 199 |
+| ECR/TDD | 118 | 17 | 5,119 | 2026-09-10 | 119, 121, 122, 150, 262 (and 72 Task - ECR Number: 2 / 7, last 2026-02-08) |
+| Service Ticket | 184 | 12 | 434 | 2026-08-16 | 188, 189 |
+| VIP Order Worksheet | 247 | 3 | 106 | 2026-07-22 | 248 |
+| Document Inquiry | 163 | 2 | 3,465 | 2026-01-11 | 164, 165, 166 |
+| Product (lookup only) | n/a | 78 | 1,224 | 2026-10-12 | 21 Product - Status |
+
+Document Inquiry was heavily used before and has almost stopped (2 cards in 2026, the last on 2026-01-11). Ask whether that process moved somewhere else.
 
 ---
 
