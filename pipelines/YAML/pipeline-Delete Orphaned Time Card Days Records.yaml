@@ -1,0 +1,39 @@
+# Delete Orphaned Time Card Days Records
+#
+# This pipeline searches the 'Project Activity' app's 'Time Card Days'
+# table for records marked as orphaned. It then deletes each orphaned
+# record found.
+#
+
+# Account slugs:
+#  - quickbase[oMVjzjY#chartindustries]: Realm Default Account <None>
+---
+- META:
+    name: Delete Orphaned Time Card Days Records
+    description: This pipeline searches the 'Project Activity' app's 'Time Card Days'
+      table for records marked as orphaned. It then deletes each orphaned record found.
+    crontab: 0 2 * * *
+    crontab_timezone: America/Chicago
+    tag_names:
+    - Project Activity
+    enabled: true
+- ACCOUNTS:
+  - slug: oMVjzjY#chartindustries
+    channel: quickbase
+    alias: realm-default-account
+    accountType: tokenless
+    realm: chartindustries
+- QUERY quickbase[oMVjzjY#chartindustries] record search -> aa:
+    FILTERS:
+    - AND:
+      - orphan is true
+    inputs-meta:
+      app: '"Project Activity" <bg86uwfcw>'
+      export_fields: '"Orphan" <37>'
+      table: '"Time Card Days" <bwe8cjimn>'
+    name: Search for Orphaned Records
+- aa<>LOOP:
+  - DO:
+    - aa<>ACTION quickbase record delete -> ab:
+        name: Delete Orphaned Record
+...

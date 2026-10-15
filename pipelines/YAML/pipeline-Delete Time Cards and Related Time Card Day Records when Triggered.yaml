@@ -1,0 +1,47 @@
+# Delete Time Cards and Related Time Card Day Records when Triggered
+#
+# When a Time Card record in QuickBase is marked for deletion, this
+# pipeline first searches for and deletes any associated Time Card Days
+# records. Finally, it deletes the original Time Card record.
+#
+
+# Account slugs:
+#  - quickbase[oMVjzjY#chartindustries]: Realm Default Account <None>
+---
+- META:
+    name: Delete Time Cards and Related Time Card Day Records when Triggered
+    description: When a Time Card record in QuickBase is marked for deletion, this
+      pipeline first searches for and deletes any associated Time Card Days records.
+      Finally, it deletes the original Time Card record.
+    tag_names:
+    - Project Activity
+    enabled: true
+- ACCOUNTS:
+  - slug: oMVjzjY#chartindustries
+    channel: quickbase
+    alias: realm-default-account
+    accountType: tokenless
+    realm: chartindustries
+- TRIGGER quickbase[oMVjzjY#chartindustries] record on_update -> a:
+    FILTERS:
+    - AND:
+      - delete_record is true
+    inputs-meta:
+      app: '"Project Activity" <bg86uwfcw>'
+      export_fields: '"Delete Record" <268>'
+      table: '"Time Cards" <bhm9822gc>'
+      trigger_fields: '"Delete Record" <268>'
+- QUERY quickbase[oMVjzjY#chartindustries] record search -> aa:
+    FILTERS:
+    - AND:
+      - related_time_card equals {{a.id}}
+    inputs-meta:
+      app: '"Project Activity" <bg86uwfcw>'
+      export_fields: '"Related Time Card" <22>'
+      table: '"Time Card Days" <bwe8cjimn>'
+    name: Search for Related Time Card Days Records
+- aa<>LOOP:
+  - DO:
+    - aa<>ACTION quickbase record delete -> ab: {}
+- a<>ACTION quickbase record delete -> b: {}
+...
