@@ -1,11 +1,23 @@
 # Create/Update Time Card Days from New/Updated Time Card
 #
+# When a new or updated time card is created in the 'Time Cards' table,
+# this pipeline checks if the time card's week beginning date is after
+# August 22, 2026. If it is, it creates corresponding 'Time Card Days'
+# records for each day of the week, populating them with hours and other
+# relevant time card details. If the date is not after August 22, 2026, the
+# pipeline stops.
+#
 
 # Account slugs:
 #  - quickbase[oMVjzjY#chartindustries]: Realm Default Account <None>
 ---
 - META:
     name: Create/Update Time Card Days from New/Updated Time Card
+    description: When a new or updated time card is created in the 'Time Cards' table,
+      this pipeline checks if the time card's week beginning date is after August
+      22, 2026. If it is, it creates corresponding 'Time Card Days' records for each
+      day of the week, populating them with hours and other relevant time card details.
+      If the date is not after August 22, 2026, the pipeline stops.
     tag_names:
     - Project Activity
     enabled: true
@@ -22,7 +34,7 @@
       on_modify_record: 'true'
       table: '"Time Cards" <bhm9822gc>'
       trigger_fields: '"Date, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday,
-        Saturday" <9, 23, 10, 11, 12, 13, 14, 24>'
+        Saturday, Refresh Day Records" <9, 23, 10, 11, 12, 13, 14, 24, 329>'
       trigger_on_all_fields: 'false'
 - LOOKUP quickbase[oMVjzjY#chartindustries] record look_up -> ai:
     inputs-meta:
