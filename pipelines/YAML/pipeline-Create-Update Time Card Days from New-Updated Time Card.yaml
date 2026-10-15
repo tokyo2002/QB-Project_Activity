@@ -8,7 +8,7 @@
     name: Create/Update Time Card Days from New/Updated Time Card
     tag_names:
     - Project Activity
-    enabled: true
+    enabled: false
 - ACCOUNTS:
   - slug: oMVjzjY#chartindustries
     channel: quickbase
@@ -19,6 +19,7 @@
     inputs-meta:
       app: '"Project Activity" <bg86uwfcw>'
       on_add_record: 'true'
+      on_modify_record: 'true'
       table: '"Time Cards" <bhm9822gc>'
       trigger_fields: '"Date, Sunday, Monday, Tuesday, Wednesday, Thursday, Friday,
         Saturday" <9, 23, 10, 11, 12, 13, 14, 24>'
