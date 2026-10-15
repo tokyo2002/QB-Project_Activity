@@ -162,7 +162,7 @@ Key field: **Day Key** [before 3a]. Record name in reports: Time Card Title + Wo
 | TC - Week Beginning | Lookup | D | 4a | |
 | TC - Timecard Locked | Lookup | D | 4b | |
 | TC - Record ID# | Lookup | D | 4c | Blank once the card is deleted |
-| Date Drift | Formula – Checkbox | D | `[Work Date] <> [TC - Week Beginning] + Days([Day Index])` | True means the card's Date moved and this record wasn't rewritten. See check V6 |
+| Date Drift | Formula – Checkbox | D | `IsNull([Work Date]) or [Work Date] <> [TC - Week Beginning] + Days([Day Index])` (blank Work Date added 2026-10-14) | True means the card's Date moved and this record wasn't rewritten. See check V6 |
 | Key Mismatch | Formula – Checkbox | D | `IsNull([Day Index]) or [Day Index] < 0 or [Day Index] > 6 or [Day Key] <> [Related Time Card] * 10 + [Day Index]` (updated 2026-10-14, D3) | True means a writer built the key wrong. Should never be true. See check V6 |
 | Provisional | Formula – Checkbox | D | `not [TC - Timecard Locked]` | Hours can still change |
 | Orphan | Formula – Checkbox | D | `[TC - Record ID#] = 0` | Test for 0, not `IsNull`: a numeric lookup with no parent record reads as 0, and any value above 0 means the card exists (changed 2026-10-14). True means the card was deleted and Pipeline B hasn't swept this record yet. Every report filters it out. See critical note #7 |

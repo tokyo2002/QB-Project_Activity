@@ -85,7 +85,8 @@ FORMULA_FIELDS = [
      "var date pc = If(Day($t) >= 26, AdjustMonth(FirstDayOfMonth($t), 1), FirstDayOfMonth($t));\n"
      "var date d = AdjustMonth($pc, -1);\n" + PERIOD_MONTH + "[Accounting Period] = " + PERIOD_NAME),
     ("BU (report)", "text", 'If(Trim([BU Full Name]) = "", "(no BU)", [BU Full Name])'),
-    ("Date Drift", "checkbox", "[Work Date] <> [TC - Week Beginning] + Days([Day Index])"),
+    ("Date Drift", "checkbox",
+     "IsNull([Work Date]) or [Work Date] <> [TC - Week Beginning] + Days([Day Index])"),
     ("Key Mismatch", "checkbox",
      "IsNull([Day Index]) or [Day Index] < 0 or [Day Index] > 6 "
      "or [Day Key] <> [Related Time Card] * 10 + [Day Index]"),
