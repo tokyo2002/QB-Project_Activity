@@ -1,6 +1,6 @@
 """Build the Time Card Days table in the Project Activity Quickbase app.
 
-Carries out build-order steps 1-7 of pipelines/TimeCardDays_Report_v2.md:
+Carries out build-order steps 1-7 of time-card-days/TimeCardDays_Report_v2.md:
 the table, its fields, relationship 3a (Time Cards -> Time Card Days) with
 lookups 4a/4b and summaries 5a/5b, the formula fields, and "Day Records Out
 of Sync" on Time Cards. Creates things only; it never edits or deletes an
@@ -14,7 +14,7 @@ existing field, and it writes no records.
 
 Safe to re-run: the table is matched by name and fields by label, so a run that
 stopped partway picks up where it left off. Every field ID is written to
-pipelines/time_card_days_fields.json for the build sheet and Pipeline A.
+time-card-days/time_card_days_fields.json for the build sheet and Pipeline A.
 
 Not possible through the API. Do these by hand afterwards (the script lists them):
   - deleting day records with their card: Quickbase has no cascade delete, so this is
@@ -30,14 +30,14 @@ import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-STATE = ROOT / "pipelines" / "time_card_days_fields.json"
+STATE = ROOT / "time-card-days" / "time_card_days_fields.json"
 
 TIME_CARDS = "bhm9822gc"
 TABLE = {
     "name": "Time Card Days",
     "description": "One record per time card per weekday, for accounting-period hours. "
                    "Written only by Pipeline A and scripts/backfill_time_card_days.py. "
-                   "Design: pipelines/TimeCardDays_Report_v2.md in the Project Activity repo.",
+                   "Design: time-card-days/TimeCardDays_Report_v2.md in the Project Activity repo.",
     "singleRecordName": "Time Card Day",
     "pluralRecordName": "Time Card Days",
 }
@@ -109,7 +109,7 @@ MANUAL_STEPS = [
     "(fid 268) Pipeline, and build Pipeline B, the nightly orphan sweep (build sheet 15).",
     "Day Key: in field properties, turn off the thousands separator. Optionally make it the table's key field.",
     "Roles (build sheet 13): Accounting view; no Add/Modify on Time Card Days for anyone but Admin.",
-    "Copy the field IDs from pipelines/time_card_days_fields.json into the build sheet.",
+    "Copy the field IDs from time-card-days/time_card_days_fields.json into the build sheet.",
 ]
 
 

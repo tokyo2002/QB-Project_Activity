@@ -103,7 +103,7 @@ Trim([Account Number]) <> "" and Size(GetRecords($q)) = 0
 
 ## 15. Pipeline
 
-**"NPD Account Sync"**. Store the exported YAML here as `pipelines/npd-account-sync.yaml`.
+**"NPD Account Sync"**. Store the exported YAML here as `npd-account-sync/npd-account-sync.yaml`.
 
 | Step | Type | Configuration |
 |---|---|---|

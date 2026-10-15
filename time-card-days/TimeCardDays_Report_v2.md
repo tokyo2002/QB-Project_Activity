@@ -358,7 +358,7 @@ Steps 1–7 were done on 2026-10-14 by `scripts/build_time_card_days.py`. Step 8
 6. Add the formula fields from [5.1](#51-time-card-days-new): Accounting Period, Period Start, Period End, In Current Period, In Last Period, BU (report), Date Drift, Key Mismatch, Provisional, Orphan [after 4a, 4b, 4c].
 7. On Time Cards, add summaries **5a**, **5b**, then **Day Records Out of Sync** [after 5a, 5b].
 8. Set roles ([13](#13-roles--permissions)): every non-admin role gets **None** and **Hide** on Time Card Days. By hand, because the API can't do it.
-9. Build **Pipeline A** ([15](#15-pipelines)) and test it on one card ([14](#14-validation-checklist), checks V1–V4). Export its YAML into `pipelines/`.
+9. Build **Pipeline A** ([15](#15-pipelines)) and test it on one card ([14](#14-validation-checklist), checks V1–V4). Export its YAML into `YAML/`.
 10. Add the day-record delete step to the **Delete Record Pipeline**, and build **Pipeline B** ([15](#15-pipelines)). Test with V4 and V13. Then turn Pipelines A and B **on**.
 11. Run the **backfill** ([16](#16-one-time-backfill)). Order relative to step 10 doesn't matter, because writes are upserts on Day Key. Doing step 10 first means no edits are missed in between.
 12. Build reports R1–R7.
@@ -424,13 +424,13 @@ Roles as of 2026-10-14, from `API_GetRoleInfo`. A role added later needs the sam
 
 ## 15. Pipelines
 
-Three Pipelines write to or delete from Time Card Days (`bwe8cjimn`). All three run as an **admin user** (section 13), so they need no role changes. Export each one's YAML into this folder after building it: `pipelines/<name>.yaml`.
+Three Pipelines write to or delete from Time Card Days (`bwe8cjimn`). All three run as an **admin user** (section 13), so they need no role changes. Export each one's YAML into this folder after building it: `YAML/pipeline-<name>.yaml`.
 
 | Pipeline | Trigger | What it does | Status |
 |---|---|---|---|
-| **B. Orphan sweep** (new) | Nightly schedule | Deletes day records whose card no longer exists | **Built and tested 2026-10-14** (V13). Export YAML to `pipelines/` |
-| **Delete Record** (existing) | Delete Record (TC fid 268) checked | **New step:** deletes the card's day records before deleting the card | **Step added and tested 2026-10-14** (V4, using a test card with hand-made day records). Export YAML to `pipelines/` |
-| **A. Sync on change** (new) | Time Card created or updated | Writes the card's 7 day records | **Upsert version live and tested 2026-10-15** (V1, V2, V3, V10, V11 on test card 555173). Created-only version ran 16:04–17:22 UTC that day. Rebuild steps: [PipelineA_Upsert_Build.md](PipelineA_Upsert_Build.md). Export YAML to `pipelines/YAML/` after changes |
+| **B. Orphan sweep** (new) | Nightly schedule | Deletes day records whose card no longer exists | **Built and tested 2026-10-14** (V13). Export YAML to `YAML/` |
+| **Delete Record** (existing) | Delete Record (TC fid 268) checked | **New step:** deletes the card's day records before deleting the card | **Step added and tested 2026-10-14** (V4, using a test card with hand-made day records). Export YAML to `YAML/` |
+| **A. Sync on change** (new) | Time Card created or updated | Writes the card's 7 day records | **Upsert version live and tested 2026-10-15** (V1, V2, V3, V10, V11 on test card 555173). Created-only version ran 16:04–17:22 UTC that day. Rebuild steps: [PipelineA_Upsert_Build.md](PipelineA_Upsert_Build.md). Export YAML to `YAML/` after changes |
 
 Build them in that order (B, Delete Record, A). B and the delete step only remove records, so they're safe to switch on first. A is switched on last, after its tests pass.
 

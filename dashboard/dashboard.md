@@ -67,7 +67,7 @@ Both use the Inspinia 5 theme (WrapBootstrap). The theme lives in `Wrapbootstrap
 | File | What it is |
 |---|---|
 | `my-hours-inspinia.html` | Page 43 restyled on Inspinia. Same data and behavior. |
-| `accounting-period.html` | Hours by accounting period (26th to 25th), split by BU and project, with a Final/Provisional status and CSV export. Uses sample data until the Time Card Days table exists (`pipelines/TimeCardDays_Report_v2.md`). |
+| `accounting-period.html` | Hours by accounting period (26th to 25th), split by BU and project, with a Final/Provisional status and CSV export. Uses sample data until the Time Card Days table exists (`time-card-days/TimeCardDays_Report_v2.md`). |
 
 ## Known issues
 

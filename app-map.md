@@ -8,7 +8,7 @@ The sub-processes in the Project Activity app (`bg86uwfcw`) and the tables each 
 |---|---|---|
 | Employees | `bhm98v33q` | Updated by a pipeline |
 | Time Cards | `bhm9822gc` | About 125k records. Record IDs run past 555,000 because many cards have been deleted |
-| Time Card Days | `bwe8cjimn` | New 2026-10-14. 7 records per time card, for accounting-period hours. See `pipelines/` |
+| Time Card Days | `bwe8cjimn` | New 2026-10-14. 7 records per time card, for accounting-period hours. See `time-card-days/` |
 | Weeks | `bvpp7r2kk` | |
 | Users | `bntsrn9zw` | |
 | Departments | `bvwyyzgqd` | Connected table from the Users app |
@@ -106,7 +106,7 @@ The hours affected are measured in the Time Card Days build sheet, O1.
 | Table | ID | Notes |
 |---|---|---|
 | NPD Project Tracking | `bvaesxd8r` | |
-| NPD Investments | `bv6kbiwnp` | Used by the NPD Account Sync pipeline (see `pipelines/`) |
+| NPD Investments | `bv6kbiwnp` | Used by the NPD Account Sync pipeline (see `npd-account-sync/`) |
 | NPD Expenses | `bwa9wjt5w` | JDE subledger records |
 | NPD Proposed Hours | `bvpdz8n8b` | |
 | User NPD Projects | `bvrmztv29` | |
