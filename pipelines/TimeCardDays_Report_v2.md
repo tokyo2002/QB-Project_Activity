@@ -213,6 +213,7 @@ Fids 30–31 were throwaway test fields, already deleted. Day Key is Unique and 
 |---|---|---|---|---|
 | Day Records - Hours (fid 326) | Summary | D | 5a | |
 | Day Records - Count (fid 327) | Summary | D | 5b | |
+| Refresh Day Records (fid 329) | Checkbox | — | Admin only | Pipeline A trigger field. Changing it either way rebuilds the card's 7 day records. Not on user forms |
 | Time Card Day records (fid 324) | Report link | D | Created automatically with relationship 3a | Not on any form. Can be embedded on an admin form to show a card's day records |
 | ~~Add Time Card Day (fid 325)~~ | Formula – URL | D | Created automatically with relationship 3a | **Deleted 2026-10-14**: day records are system-written only (relationship 3a) |
 | Day Records Out of Sync (fid 328) | Formula – Checkbox | D | `[Week Ending] >= Date(2026,8,26) and ([Day Records - Count] <> 7 or Round([Total Hours], 0.01) <> Round([Day Records - Hours], 0.01))` | [after 5a, 5b]. Update the date if the backfill is extended (D2). Round added 2026-10-15: the summed hours can carry a floating-point remainder (40.839999… vs 40.84 on card 549541), which flagged a correct card |
@@ -538,7 +539,7 @@ Then switch A on (build step 10). Check the Pipelines usage allowance first (O6)
 
 ## 16. One-time backfill
 
-**Done 2026-10-15, through Pipeline A instead of a script.** Kris re-saved the cards in batches so that each one triggered Pipeline A. Nothing else writes day records, so the backfill follows the exact logic tested in V1–V11. The script below was never written. Keep its description as the fallback, and for the period-close refresh (D1).
+**Done 2026-10-15, through Pipeline A instead of a script.** Kris added a checkbox, **Refresh Day Records** (TC fid 329), to Pipeline A's trigger fields, then changed it on the cards in batches. Each change starts one normal Pipeline A run. Nothing else writes day records, so the backfill follows the exact logic tested in V1–V11. The script below was never written. Keep its description as the fallback. **To refresh any set of cards later**, for example at period close (D1) or after a Task's BU is fixed: filter a report to those cards and use Change values on Refresh Day Records. Checking and unchecking both trigger, so it never needs resetting. Work in batches of about a week (~760 cards) because of the usage allowance (O6).
 
 **Result, checked through the API on 2026-10-15:**
 
