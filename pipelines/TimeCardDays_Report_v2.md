@@ -163,7 +163,7 @@ Key field: **Day Key** [before 3a]. Record name in reports: Time Card Title + Wo
 | TC - Timecard Locked | Lookup | D | 4b | |
 | TC - Record ID# | Lookup | D | 4c | Blank once the card is deleted |
 | Date Drift | Formula – Checkbox | D | `[Work Date] <> [TC - Week Beginning] + Days([Day Index])` | True means the card's Date moved and this record wasn't rewritten. See check V6 |
-| Key Mismatch | Formula – Checkbox | D | `[Day Key] <> [Related Time Card] * 10 + [Day Index]` | True means a writer built the key wrong. Should never be true. See check V6 |
+| Key Mismatch | Formula – Checkbox | D | `IsNull([Day Index]) or [Day Index] < 0 or [Day Index] > 6 or [Day Key] <> [Related Time Card] * 10 + [Day Index]` (updated 2026-10-14, D3) | True means a writer built the key wrong. Should never be true. See check V6 |
 | Provisional | Formula – Checkbox | D | `not [TC - Timecard Locked]` | Hours can still change |
 | Orphan | Formula – Checkbox | D | `[TC - Record ID#] = 0` | Test for 0, not `IsNull`: a numeric lookup with no parent record reads as 0, and any value above 0 means the card exists (changed 2026-10-14). True means the card was deleted and Pipeline B hasn't swept this record yet. Every report filters it out. See critical note #7 |
 
@@ -337,7 +337,7 @@ All on Time Card Days. Every report filters **Hours > 0** and **Orphan = false**
 | R4 | Accounting – Pick a Period | Summary | Accounting Period = *ask the user*; Hours > 0 | Same as R1 | Power users only (not on the dashboard) |
 | R5 | Accounting – Last Period by Legacy BU | Summary | Same as R1 | Rows: Legacy BU → Project Name | Temporary, until O1 is decided |
 | R6 | Admin – Sync problems | Table on **Time Cards** | Day Records Out of Sync = true | Record ID#, Employee, Week Beginning, Total Hours, Day Records - Hours, Day Records - Count | Admin |
-| R7 | Admin – Date drift / key mismatch | Table | Date Drift = true OR Key Mismatch = true | Day Key, Related Time Card, Day Index, Work Date, TC - Week Beginning | Admin |
+| R7 | **Date Drift or Key Mismatch** (report ID 6, built 2026-10-14) | Table | Date Drift = true OR Key Mismatch = true | As built: Day Key, Day Index, Work Date, Hours, Employee, Orphan; sort Day Key desc. Suggested: add Related Time Card and TC - Week Beginning, which are needed to see *why* a record is listed | Admin |
 | R8 | **Orphaned Records** (report ID 5, built 2026-10-14) | Table | Orphan = true | As built: Day Key, Day Index, Work Date, Hours, Employee, Orphan; sort Day Key desc. Suggested: add Related Time Card, which keeps the deleted card's ID | Admin. Should be empty the morning after Pipeline B runs. Pipeline B can also use it as its query |
 
 R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Project is not blank`, which matches report 207's scope (O5).
@@ -377,7 +377,7 @@ Steps 1–7 were done on 2026-10-14 by `scripts/build_time_card_days.py`. Step 8
 | O7 | **Deferred** | **Accounting access.** There is no Accounting role. Until it's decided, only admins can see Time Card Days and run R1–R5. Options: a new Accounting role with View (recommended), View for an existing role, or admins export the reports. Decide before step 12 (reports) goes to accounting. |
 | D1 | Deferred | **Automate the period-close refresh.** Now: run the script manually on the date in [9.3](#93-when-a-period-is-final). Later: a scheduled Pipeline that rewrites cards where `Week Ending ≥ Period Start` of the just-finalized period. It needs a loop over about 3k cards, so check O6 first. |
 | D2 | Deferred | **Extend the backfill to earlier history.** Run the script with an earlier `--since` and update the cutoff date in "Day Records Out of Sync". ⚠ **Unrecoverable if postponed:** a snapshot captures BU and project *as they are when written*. Backfilling old periods later will record today's Task → BU/project assignments, not the ones in force at the time. If old periods will ever matter, back them up sooner rather than later. |
-| D3 | Deferred | **Key Mismatch (fid 35) misses records with a blank Day Index.** It shows false on such records, so R7 doesn't list them (found 2026-10-14 on manual test record 1). Proposed formula: `IsNull([Day Index]) or [Day Key] <> [Related Time Card] * 10 + [Day Index]`. Low priority: Pipeline A and the backfill always set Day Index. Revisit later. |
+| D3 | **Done** 2026-10-14 | **Key Mismatch (fid 35) missed records with a blank Day Index.** Kris changed the formula to also flag a blank or out-of-range Day Index (see 5.1). Test record 1, which had a blank Day Index, now appears on R7. |
 | X1 | **Declined** | *Formula-only split on Time Cards* (e.g. "Hours in start period" and "Hours in end period" fields). A report can't merge two hour columns into one group per period. |
 | X2 | **Declined** | *Formula-query totals on an Accounting Periods table.* This gives totals only, and a BU × project split would need a record per combination. |
 | X3 | **Declined** | *Live lookups for BU and project.* Re-running a closed period would change when a task is reassigned. The user requires reproducible numbers. |

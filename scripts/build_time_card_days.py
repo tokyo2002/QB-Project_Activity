@@ -86,7 +86,9 @@ FORMULA_FIELDS = [
      "var date d = AdjustMonth($pc, -1);\n" + PERIOD_MONTH + "[Accounting Period] = " + PERIOD_NAME),
     ("BU (report)", "text", 'If(Trim([BU Full Name]) = "", "(no BU)", [BU Full Name])'),
     ("Date Drift", "checkbox", "[Work Date] <> [TC - Week Beginning] + Days([Day Index])"),
-    ("Key Mismatch", "checkbox", "[Day Key] <> [Related Time Card] * 10 + [Day Index]"),
+    ("Key Mismatch", "checkbox",
+     "IsNull([Day Index]) or [Day Index] < 0 or [Day Index] > 6 "
+     "or [Day Key] <> [Related Time Card] * 10 + [Day Index]"),
     ("Provisional", "checkbox", "not [TC - Timecard Locked]"),
     # Quickbase has no cascade delete: true means the card is gone and Pipeline B has yet to sweep this record.
     # Test the lookup for 0, not IsNull: a numeric lookup with no parent reads as 0 (blank counts as zero).
