@@ -21,6 +21,22 @@ A Time Card is **one person's hours against one piece of work for one week** (Su
 
 **What every card has**
 
+Fields that may not be required, but are essential defining a TIme Card
+
+- Employee
+- Time Card Type
+- Time Card Title
+- Date
+- Week Beginning calculated from [Date]
+- Sunday
+- Monday
+- Tuesday
+- Wednesday
+- Thursday
+- Friday
+- Saturday
+
+
 | Part | Fields | Notes |
 |---|---|---|
 | Who | Related Employee (15, user field). Employee (17) is a lookup of it | Employee details (name, department, location) are lookups from Employees, so they show the person's *current* values, not the values at the time |
