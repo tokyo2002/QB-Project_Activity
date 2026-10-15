@@ -337,7 +337,7 @@ All on Time Card Days. Every report filters **Hours > 0** and **Orphan = false**
 | R4 | Accounting – Pick a Period | Summary | Accounting Period = *ask the user*; Hours > 0 | Same as R1 | Power users only (not on the dashboard) |
 | R5 | Accounting – Last Period by Legacy BU | Summary | Same as R1 | Rows: Legacy BU → Project Name | Temporary, until O1 is decided |
 | R6 | Admin – Sync problems | Table on **Time Cards** | Day Records Out of Sync = true | Record ID#, Employee, Week Beginning, Total Hours, Day Records - Hours, Day Records - Count | Admin |
-| R7 | **Date Drift or Key Mismatch** (report ID 6, built 2026-10-14) | Table | Date Drift = true OR Key Mismatch = true | As built: Day Key, Day Index, Work Date, Hours, Employee, Orphan; sort Day Key desc. Suggested: add Related Time Card and TC - Week Beginning, which are needed to see *why* a record is listed | Admin |
+| R7 | **Date Drift or Key Mismatch** (report ID 6, built 2026-10-14) | Table | Date Drift = true OR Key Mismatch = true | As built: Day Key, Day Index, Related Time Card, TC - Week Beginning, Date Drift, Key Mismatch; sort Day Key desc. **Signed off 2026-10-14** | Admin |
 | R8 | **Orphaned Records** (report ID 5, built 2026-10-14) | Table | Orphan = true | As built: Day Key, Day Index, Work Date, Hours, Employee, Orphan; sort Day Key desc. Suggested: add Related Time Card, which keeps the deleted card's ID | Admin. Should be empty the morning after Pipeline B runs. Pipeline B can also use it as its query |
 
 R1–R3 can also be shown as Hyderabad-only variants by adding `Hyderabad Project is not blank`, which matches report 207's scope (O5).
