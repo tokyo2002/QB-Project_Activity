@@ -8,7 +8,7 @@
     name: Create/Update Time Card Days from New/Updated Time Card
     tag_names:
     - Project Activity
-    enabled: false
+    enabled: true
 - ACCOUNTS:
   - slug: oMVjzjY#chartindustries
     channel: quickbase
@@ -45,8 +45,8 @@
           app: '"Project Activity" <bg86uwfcw>'
           export_fields: '"Related Time Card, Hours, Day Index, Work Date, Employee,
             BU Code, BU Name, BU Full Name, Time Card Type, Time Card Title, Project
-            Name, Project Type, Billable?" <22, 9, 7, 8, 10, 11, 12, 13, 18, 17, 15,
-            16, 20>'
+            Name, Project Type, Billable?, Snapshot Written" <22, 9, 7, 8, 10, 11,
+            12, 13, 18, 17, 15, 16, 20, 21>'
           merge_field: '"Day Key" <6>'
           table: '"Time Card Days" <bwe8cjimn>'
     - aj<>ACTION quickbase bulk_record_set create -> ak:
@@ -58,10 +58,11 @@
           day_index: '0'
           day_key: '{{ (ai.id | int) * 10 + 0 }}'
           employee: '{{ai.employee.email}}'
-          hours: '{{ai.sunday}}'
+          hours: '{{ai.sunday | default(0, true)}}'
           project_name: '{{ai.project_name}}'
           project_type: '{{ai.project_type}}'
           related_time_card: '{{ai.id}}'
+          snapshot_written: '{{time.now}}'
           time_card_title: '{{ai.time_card_title}}'
           time_card_type: '{{ai.time_card_type}}'
           work_date: '{{ ai.week_beginning + time.delta(days=0) }}'
@@ -75,10 +76,11 @@
           day_index: '1'
           day_key: '{{ (ai.id | int) * 10 + 1 }}'
           employee: '{{ai.employee.email}}'
-          hours: '{{ai.monday}}'
+          hours: '{{ai.monday | default(0, true)}}'
           project_name: '{{ai.project_name}}'
           project_type: '{{ai.project_type}}'
           related_time_card: '{{ai.id}}'
+          snapshot_written: '{{time.now}}'
           time_card_title: '{{ai.time_card_title}}'
           time_card_type: '{{ai.time_card_type}}'
           work_date: '{{ ai.week_beginning + time.delta(days=1) }}'
@@ -92,10 +94,11 @@
           day_index: '2'
           day_key: '{{ (ai.id | int) * 10 + 2 }}'
           employee: '{{ai.employee.email}}'
-          hours: '{{ai.tuesday}}'
+          hours: '{{ai.tuesday | default(0, true)}}'
           project_name: '{{ai.project_name}}'
           project_type: '{{ai.project_type}}'
           related_time_card: '{{ai.id}}'
+          snapshot_written: '{{time.now}}'
           time_card_title: '{{ai.time_card_title}}'
           time_card_type: '{{ai.time_card_type}}'
           work_date: '{{ ai.week_beginning + time.delta(days=2) }}'
@@ -109,10 +112,11 @@
           day_index: '3'
           day_key: '{{ (ai.id | int) * 10 + 3 }}'
           employee: '{{ai.employee.email}}'
-          hours: '{{ai.wednesday}}'
+          hours: '{{ai.wednesday | default(0, true)}}'
           project_name: '{{ai.project_name}}'
           project_type: '{{ai.project_type}}'
           related_time_card: '{{ai.id}}'
+          snapshot_written: '{{time.now}}'
           time_card_title: '{{ai.time_card_title}}'
           time_card_type: '{{ai.time_card_type}}'
           work_date: '{{ ai.week_beginning + time.delta(days=3) }}'
@@ -126,10 +130,11 @@
           day_index: '4'
           day_key: '{{ (ai.id | int) * 10 + 4 }}'
           employee: '{{ai.employee.email}}'
-          hours: '{{ai.thursday}}'
+          hours: '{{ai.thursday | default(0, true)}}'
           project_name: '{{ai.project_name}}'
           project_type: '{{ai.project_type}}'
           related_time_card: '{{ai.id}}'
+          snapshot_written: '{{time.now}}'
           time_card_title: '{{ai.time_card_title}}'
           time_card_type: '{{ai.time_card_type}}'
           work_date: '{{ ai.week_beginning + time.delta(days=4) }}'
@@ -143,10 +148,11 @@
           day_index: '5'
           day_key: '{{ (ai.id | int) * 10 + 5 }}'
           employee: '{{ai.employee.email}}'
-          hours: '{{ai.friday}}'
+          hours: '{{ai.friday | default(0, true)}}'
           project_name: '{{ai.project_name}}'
           project_type: '{{ai.project_type}}'
           related_time_card: '{{ai.id}}'
+          snapshot_written: '{{time.now}}'
           time_card_title: '{{ai.time_card_title}}'
           time_card_type: '{{ai.time_card_type}}'
           work_date: '{{ ai.week_beginning + time.delta(days=5) }}'
@@ -160,10 +166,11 @@
           day_index: '6'
           day_key: '{{ (ai.id | int) * 10 + 6 }}'
           employee: '{{ai.employee.email}}'
-          hours: '{{ai.saturday}}'
+          hours: '{{ai.saturday | default(0, true)}}'
           project_name: '{{ai.project_name}}'
           project_type: '{{ai.project_type}}'
           related_time_card: '{{ai.id}}'
+          snapshot_written: '{{time.now}}'
           time_card_title: '{{ai.time_card_title}}'
           time_card_type: '{{ai.time_card_type}}'
           work_date: '{{ ai.week_beginning + time.delta(days=6) }}'
