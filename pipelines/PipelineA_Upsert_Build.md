@@ -35,7 +35,7 @@ The 21 records written on 2026-10-15 already have correct Day Keys, so the upser
 | Table | Time Cards `bhm9822gc` |
 | Events | **Record added** and **Record updated** (both ticked) |
 | Trigger on all fields | **No** |
-| Trigger fields | Date (9), Sunday (23), Monday (10), Tuesday (11), Wednesday (12), Thursday (13), Friday (14), Saturday (24), Related Task (57), Related Employee (15) |
+| Trigger fields | Date (9), Sunday (23), Monday (10), Tuesday (11), Wednesday (12), Thursday (13), Friday (14), Saturday (24). Related Task (57) and Related Employee (15) left out for now: assumed not to change after entry (build sheet D4) |
 
 **Remove Week Beginning (8)** from the trigger fields. It's a formula (critical note #1). The trigger's export fields can be trimmed to just Record ID#, because nothing after step b reads from **a**.
 

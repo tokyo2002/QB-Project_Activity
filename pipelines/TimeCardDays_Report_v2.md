@@ -31,6 +31,7 @@ Build sheet, **v2** · 2026-10-09 · App: Project Activity (`bg86uwfcw`) · Prod
 
 | Version | Date | Change |
 |---|---|---|
+| v2 (amended) | 2026-10-15 | Pipeline A rebuilt as a bulk upsert and tested (V1–V3, V10, V11). Backfill done through Pipeline A, and its result is recorded in [16](#16-one-time-backfill). Day Records Out of Sync now rounds hours to 2 decimals. Added D4 (Related Task and Related Employee not watched). |
 | v2 (amended) | 2026-10-14 | Orphan (fid 37) is now `[TC - Record ID#] = 0` instead of `IsNull(...)`: a numeric lookup with no parent reads as 0, so 0 is the reliable test. Changed live by Kris; script and sheet updated to match. |
 | v2 (amended) | 2026-10-14 | Rewrote [15](#15-pipelines) as a step-by-step build plan with the real field IDs: build order B → Delete Record step → A, Pipeline B as Search + loop delete, Pipeline A's two guards merged into one condition (step c), a full 7-row mapping table, and the tests for each Pipeline. |
 | v2 (amended) | 2026-10-14 | **Quickbase has no cascade delete.** Earlier versions relied on a relationship setting that doesn't exist. Day records are now removed by a step added to the Delete Record (fid 268) Pipeline, plus **Pipeline B**, a nightly orphan sweep. Added the lookup 4c TC - Record ID# and the formula Orphan. Reports filter `Orphan = false`. Rewrote critical note #7, relationship 3a, build order steps 4 and 9–10, and check V4. Added V13. |
@@ -214,7 +215,7 @@ Fids 30–31 were throwaway test fields, already deleted. Day Key is Unique and 
 | Day Records - Count (fid 327) | Summary | D | 5b | |
 | Time Card Day records (fid 324) | Report link | D | Created automatically with relationship 3a | Not on any form. Can be embedded on an admin form to show a card's day records |
 | ~~Add Time Card Day (fid 325)~~ | Formula – URL | D | Created automatically with relationship 3a | **Deleted 2026-10-14**: day records are system-written only (relationship 3a) |
-| Day Records Out of Sync (fid 328) | Formula – Checkbox | D | `[Week Ending] >= Date(2026,8,26) and ([Day Records - Count] <> 7 or [Total Hours] <> [Day Records - Hours])` | [after 5a, 5b]. Update the date if the backfill is extended (D2) |
+| Day Records Out of Sync (fid 328) | Formula – Checkbox | D | `[Week Ending] >= Date(2026,8,26) and ([Day Records - Count] <> 7 or Round([Total Hours], 0.01) <> Round([Day Records - Hours], 0.01))` | [after 5a, 5b]. Update the date if the backfill is extended (D2). Round added 2026-10-15: the summed hours can carry a floating-point remainder (40.839999… vs 40.84 on card 549541), which flagged a correct card |
 
 The existing "(at entry)" fields on Time Cards (fids 286–290) have **never been populated**: 0 records. This design does **not** use them. See O3 and [17](#17-time-cards-field-audit-and-cleanup).
 
@@ -377,6 +378,7 @@ Steps 1–7 were done on 2026-10-14 by `scripts/build_time_card_days.py`. Step 8
 | O7 | **Deferred** | **Accounting access.** There is no Accounting role. Until it's decided, only admins can see Time Card Days and run R1–R5. Options: a new Accounting role with View (recommended), View for an existing role, or admins export the reports. Decide before step 12 (reports) goes to accounting. |
 | D1 | Deferred | **Automate the period-close refresh.** Now: run the script manually on the date in [9.3](#93-when-a-period-is-final). Later: a scheduled Pipeline that rewrites cards where `Week Ending ≥ Period Start` of the just-finalized period. It needs a loop over about 3k cards, so check O6 first. |
 | D2 | Deferred | **Extend the backfill to earlier history.** Run the script with an earlier `--since` and update the cutoff date in "Day Records Out of Sync". ⚠ **Unrecoverable if postponed:** a snapshot captures BU and project *as they are when written*. Backfilling old periods later will record today's Task → BU/project assignments, not the ones in force at the time. If old periods will ever matter, back them up sooner rather than later. |
+| D4 | Deferred 2026-10-15 | **Pipeline A doesn't watch Related Task (57) or Related Employee (15).** Assumed for now that they don't change after a card is entered. If one does change, the day records keep the old BU, project and employee until a watched field (Date or a day) is edited, or the period-close refresh runs. To cover it later, add both fields to the trigger. |
 | D3 | **Done** 2026-10-14 | **Key Mismatch (fid 35) missed records with a blank Day Index.** Kris changed the formula to also flag a blank or out-of-range Day Index (see 5.1). Test record 1, which had a blank Day Index, now appears on R7. |
 | X1 | **Declined** | *Formula-only split on Time Cards* (e.g. "Hours in start period" and "Hours in end period" fields). A report can't merge two hour columns into one group per period. |
 | X2 | **Declined** | *Formula-query totals on an Accounting Periods table.* This gives totals only, and a BU × project split would need a record per combination. |
@@ -427,7 +429,7 @@ Three Pipelines write to or delete from Time Card Days (`bwe8cjimn`). All three 
 |---|---|---|---|
 | **B. Orphan sweep** (new) | Nightly schedule | Deletes day records whose card no longer exists | **Built and tested 2026-10-14** (V13). Export YAML to `pipelines/` |
 | **Delete Record** (existing) | Delete Record (TC fid 268) checked | **New step:** deletes the card's day records before deleting the card | **Step added and tested 2026-10-14** (V4, using a test card with hand-made day records). Export YAML to `pipelines/` |
-| **A. Sync on change** (new) | Time Card created or updated | Writes the card's 7 day records | **Created-only version live 2026-10-15** (7 × Create Record). Rebuilding as the upsert below: step-by-step in [PipelineA_Upsert_Build.md](PipelineA_Upsert_Build.md) |
+| **A. Sync on change** (new) | Time Card created or updated | Writes the card's 7 day records | **Upsert version live and tested 2026-10-15** (V1, V2, V3, V10, V11 on test card 555173). Created-only version ran 16:04–17:22 UTC that day. Rebuild steps: [PipelineA_Upsert_Build.md](PipelineA_Upsert_Build.md). Export YAML to `pipelines/YAML/` after changes |
 
 Build them in that order (B, Delete Record, A). B and the delete step only remove records, so they're safe to switch on first. A is switched on last, after its tests pass.
 
@@ -519,6 +521,14 @@ Day Key **must** be computed as a number, as shown. Never build it by joining te
 | V12 | Save, then delete immediately | Run ends at step c. No records with Day Key between ID × 10 and ID × 10 + 6 |
 | V4 | Delete the test card through Delete Record | Card and its 7 records gone (also tests the delete step) |
 
+**Results, 2026-10-15** (test card 555173, checked through the API):
+
+- **V1, V2, V3, V10, V11 passed.** Same Record ID#s (176–182) through every edit, no duplicate Day Keys, blank days written as 0.0, Snapshot Written set on each run, Date Drift and Key Mismatch false, card never on R6. V11's two runs weren't checked in the activity log; the final value (Mon = 6.0) was correct.
+- **V12 and V4 not re-run.** Deletes are handled by the Delete Record Pipeline (V4 passed 2026-10-14). A late run that recreates records for a deleted card is caught by Orphan and swept by Pipeline B (V13).
+- **Live use:** a bulk save of 5 existing cards (Ryan Schuldt, 17:45 UTC) got correct day records, so bulk saves trigger A.
+- **Not yet covered by A:** cards created before 16:04 UTC or edited before 17:22 UTC on 2026-10-15, plus 555170 and 555171 (created 16:19 UTC, likely while A was switched off). The backfill picks these up.
+- **Deliberately not written yet:** Hyderabad Project (19) and Legacy BU (14). Related Task and Related Employee aren't watched (D4).
+
 Then switch A on (build step 10). Check the Pipelines usage allowance first (O6): A runs about 760 cards a week × several edits, at about 12 steps per run.
 
 **After all three are on:** run the backfill (section 16), then check R6, R7 and R8 are empty.
@@ -527,6 +537,24 @@ Then switch A on (build step 10). Check the Pipelines usage allowance first (O6)
 
 
 ## 16. One-time backfill
+
+**Done 2026-10-15, through Pipeline A instead of a script.** Kris re-saved the cards in batches so that each one triggered Pipeline A. Nothing else writes day records, so the backfill follows the exact logic tested in V1–V11. The script below was never written. Keep its description as the fallback, and for the period-close refresh (D1).
+
+**Result, checked through the API on 2026-10-15:**
+
+| Check | Result |
+|---|---|
+| Time Cards with Week Beginning ≥ 2026-08-23 | 4,988 |
+| Time Card Days records | 34,916 = 7 × 4,988 |
+| Cards with no records or not exactly 7 | 0 |
+| Duplicate Day Keys, orphans, records outside the window | 0 |
+| Hours, Work Date, Day Key, employee, BU, project, title, Billable? vs the card | All match (26,619.45 hours) |
+| R6 (Out of Sync), R7 (Date Drift or Key Mismatch), R8 (Orphans) | All empty (V6) |
+
+Found on the way:
+- The first pass missed 83 cards, all created on 2026-09-27 or 2026-10-04 (59 of them locked). A second pass picked them up.
+- Card 549541 was on R6 with correct records. Its summed hours were 40.839999… against 40.84, so Day Records Out of Sync (TC 328) now rounds both sides (see 5.2).
+- Card 436359 had the Date `0251-05-11`, a typo for 2025, and showed on R6. It's no longer in the window.
 
 **Tool:** `scripts/backfill_time_card_days.py`, to be written after the table exists. It follows the same pattern as the deploy script: `op run --env-file=.qb.env --`, dry run by default, `--apply` to write.
 

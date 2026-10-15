@@ -100,7 +100,7 @@ FORMULA_FIELDS = [
 OUT_OF_SYNC = (
     "Day Records Out of Sync", "checkbox",
     "[Week Ending] >= Date(2026,8,26) and "
-    "([Day Records - Count] <> 7 or [Total Hours] <> [Day Records - Hours])",
+    "([Day Records - Count] <> 7 or Round([Total Hours], 0.01) <> Round([Day Records - Hours], 0.01))",
 )
 
 MANUAL_STEPS = [
