@@ -427,7 +427,7 @@ Three Pipelines write to or delete from Time Card Days (`bwe8cjimn`). All three 
 |---|---|---|---|
 | **B. Orphan sweep** (new) | Nightly schedule | Deletes day records whose card no longer exists | **Built and tested 2026-10-14** (V13). Export YAML to `pipelines/` |
 | **Delete Record** (existing) | Delete Record (TC fid 268) checked | **New step:** deletes the card's day records before deleting the card | **Step added and tested 2026-10-14** (V4, using a test card with hand-made day records). Export YAML to `pipelines/` |
-| **A. Sync on change** (new) | Time Card created or updated | Writes the card's 7 day records | To build |
+| **A. Sync on change** (new) | Time Card created or updated | Writes the card's 7 day records | **Created-only version live 2026-10-15** (7 × Create Record). Rebuilding as the upsert below: step-by-step in [PipelineA_Upsert_Build.md](PipelineA_Upsert_Build.md) |
 
 Build them in that order (B, Delete Record, A). B and the delete step only remove records, so they're safe to switch on first. A is switched on last, after its tests pass.
 
